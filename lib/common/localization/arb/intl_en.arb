@@ -32,7 +32,7 @@
   "dnsServersWrongFieldError": "Use IP addresses, tls://, https://, quic://, or h3://",
   "urlWrongFieldError": "Please check the URL: it looks incorrect",
   "pleaseFillField": "Please fill out this field",
-  "editProfile": "Edit profile",
+  "editProfileName": "Edit name",
   "deleteProfile": "Delete profile",
   "deleteProfileDialogTitle": "Delete profile?",
   "addProfile": "Add profile",
@@ -114,5 +114,6 @@
   "quic": "QUIC",
   "http2": "HTTP/2",
   "bypass": "Bypass",
-  "vpn": "Vpn"
+  "vpn": "Vpn",
+  "profileNameLabel": "Profile name"
 }
