@@ -3,8 +3,8 @@ import 'package:trusttunnel/common/error/model/presentation_error.dart';
 import 'package:trusttunnel/common/error/model/presentation_field.dart';
 import 'package:trusttunnel/common/models/value_data.dart';
 import 'package:trusttunnel/data/model/routing_profile.dart';
+import 'package:trusttunnel/data/model/server_data.dart';
 import 'package:trusttunnel/data/model/vpn_protocol.dart';
-import 'package:trusttunnel/feature/server/server_details/model/server_details_data.dart';
 
 typedef DataChangedCallback =
     void Function({
@@ -13,18 +13,21 @@ typedef DataChangedCallback =
       String? domain,
       String? username,
       String? password,
+      bool? enableIpv6,
+      String? pathToPemFile,
       VpnProtocol? protocol,
-      int? routingProfileId,
+      String? routingProfileId,
       List<String>? dnsServers,
+      ValueData<String>? clientRandom,
       ValueData<String>? customSni,
     });
 
 abstract class ServerDetailsScopeController {
-  abstract final ServerDetailsData data;
+  abstract final ServerData data;
   abstract final List<RoutingProfile> routingProfiles;
   abstract final List<PresentationField> fieldErrors;
 
-  abstract final int? id;
+  abstract final String? id;
 
   abstract final bool loading;
 
@@ -41,4 +44,8 @@ abstract class ServerDetailsScopeController {
   abstract final void Function(ValueChanged<String> onSaved) submit;
 
   abstract final void Function(ValueChanged<String> onSaved) delete;
+
+  abstract final void Function() pickPemCertificate;
+
+  abstract final void Function() clearPemCertificate;
 }

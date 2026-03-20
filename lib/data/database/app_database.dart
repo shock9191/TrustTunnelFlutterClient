@@ -1,5 +1,6 @@
 import 'package:drift/drift.dart';
 import 'package:trusttunnel/common/utils/routing_profile_utils.dart';
+import 'package:trusttunnel/data/database/migrations/migrations_v2.dart';
 import 'package:trusttunnel/data/database/migrations/migrations_v3.dart';
 import 'connection.dart' as impl;
 
@@ -18,7 +19,6 @@ class AppDatabase extends _$AppDatabase {
     '192.168.0.0/16',
     '255.255.255.255/32',
   ];
-
   AppDatabase() : super(impl.connect());
   AppDatabase.inMemory(super.e);
 
@@ -100,7 +100,11 @@ class AppDatabase extends _$AppDatabase {
           RoutingProfilesCompanion.insert(
             name: 'Default profile',
             defaultMode: 2,
-            id: const Value(RoutingProfileUtils.defaultRoutingProfileId),
+            id: Value(
+              int.parse(
+                RoutingProfileUtils.defaultRoutingProfileId,
+              ),
+            ),
           ),
         );
 
@@ -113,8 +117,10 @@ class AppDatabase extends _$AppDatabase {
         );
       }
     },
-
-    onUpgrade: (m, from, to) async {
+    onUpgrade: (Migrator m, int from, int to) async {
+      if (from < 2) {
+        await const MigrationsV2().migrate(this, m);
+      }
       if (from < 3) {
         await const MigrationsV3().migrate(this, m);
       }

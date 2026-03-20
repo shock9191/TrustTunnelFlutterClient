@@ -1,3 +1,4 @@
+import 'package:flutter/foundation.dart';
 import 'package:vpn_plugin/models/upstream_protocol.dart';
 
 /// {@template endpoint}
@@ -116,7 +117,7 @@ final class Endpoint {
   /// {@endtemplate}
   final bool skipVerification;
 
-  final String? customSni;
+  final String customSni;
 
   /// {@macro endpoint}
   ///
@@ -130,15 +131,55 @@ final class Endpoint {
     this.dnsUpStreams = const [],
     this.exclusions = const [],
     this.clientRandom = '',
-    this.skipVerification = false,
     this.certificate = '',
-    this.antiDpi = false,
+    this.customSni = '',
     this.upStreamFallbackProtocol,
+    this.antiDpi = false,
+    this.skipVerification = false,
     required this.hostName,
-    required this.hasIpv6,
     required this.username,
     required this.password,
     required this.upStreamProtocol,
-    required this.customSni,
+    required this.hasIpv6,
   });
+
+  @override
+  String toString() =>
+      'Endpoint(addresses: $addresses, dnsUpStreams: $dnsUpStreams, exclusions: $exclusions, hostName: $hostName, username: $username, password: $password, clientRandom: $clientRandom, certificate: $certificate, upStreamProtocol: $upStreamProtocol, upStreamFallbackProtocol: $upStreamFallbackProtocol, antiDpi: $antiDpi, hasIpv6: $hasIpv6, skipVerification: $skipVerification)';
+
+  @override
+  bool operator ==(covariant Endpoint other) {
+    if (identical(this, other)) return true;
+
+    return listEquals(other.addresses, addresses) &&
+        listEquals(other.dnsUpStreams, dnsUpStreams) &&
+        listEquals(other.exclusions, exclusions) &&
+        other.hostName == hostName &&
+        other.username == username &&
+        other.password == password &&
+        other.clientRandom == clientRandom &&
+        other.certificate == certificate &&
+        other.upStreamProtocol == upStreamProtocol &&
+        other.upStreamFallbackProtocol == upStreamFallbackProtocol &&
+        other.antiDpi == antiDpi &&
+        other.hasIpv6 == hasIpv6 &&
+        other.skipVerification == skipVerification;
+  }
+
+  @override
+  int get hashCode => Object.hashAll([
+    addresses.hashCode,
+    dnsUpStreams.hashCode,
+    exclusions.hashCode,
+    hostName.hashCode,
+    username.hashCode,
+    password.hashCode,
+    clientRandom.hashCode,
+    certificate.hashCode,
+    upStreamProtocol.hashCode,
+    upStreamFallbackProtocol.hashCode,
+    antiDpi.hashCode,
+    hasIpv6.hashCode,
+    skipVerification.hashCode,
+  ]);
 }

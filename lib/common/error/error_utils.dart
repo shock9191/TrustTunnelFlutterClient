@@ -30,6 +30,12 @@ abstract class ErrorUtils {
       ln.dnsServersWrongFieldError,
     PresentationFieldErrorCode.fieldWrongValue when field.fieldName == PresentationFieldName.url =>
       ln.urlWrongFieldError,
+    PresentationFieldErrorCode.fieldWrongValue when field.fieldName == PresentationFieldName.clientRandom =>
+      ln.tlsWrongFieldError,
+    PresentationFieldErrorCode.fieldWrongValue when field.fieldName == PresentationFieldName.clientRandomMask =>
+      ln.tlsWrongMaskError,
+    PresentationFieldErrorCode.fieldWrongValue when field.fieldName == PresentationFieldName.clientRandomValue =>
+      ln.tlsWrongValueError,
     PresentationFieldErrorCode.fieldRequired
         when field.fieldName == PresentationFieldName.userName ||
             field.fieldName == PresentationFieldName.ipAddress ||
@@ -41,6 +47,8 @@ abstract class ErrorUtils {
             field.fieldName == PresentationFieldName.rule ||
             field.fieldName == PresentationFieldName.url =>
       ln.pleaseFillField,
+    PresentationFieldErrorCode.outOfBounds when field.fieldName == PresentationFieldName.clientRandom =>
+      ln.tlsOutOfBoundsError,
     _ => throw Exception('Localization missed: code = ${field.code} fieldName = ${field.fieldName}'),
   };
 

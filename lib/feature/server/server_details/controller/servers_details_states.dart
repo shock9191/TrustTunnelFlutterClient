@@ -1,16 +1,16 @@
 import 'package:trusttunnel/common/error/model/presentation_error.dart';
 import 'package:trusttunnel/common/error/model/presentation_field.dart';
+import 'package:trusttunnel/common/utils/routing_profile_utils.dart';
 import 'package:trusttunnel/data/model/routing_profile.dart';
-import 'package:trusttunnel/feature/server/server_details/model/server_details_data.dart';
+import 'package:trusttunnel/data/model/server_data.dart';
 
 /// {@template Servers_state}
 /// State representation for Servers-related operations.
 /// {@endtemplate}
 sealed class ServerDetailsState {
-  final ServerDetailsData data;
-  final ServerDetailsData initialData;
+  final ServerData data;
+  final ServerData initialData;
   final List<PresentationField> fieldErrors;
-
   final List<RoutingProfile> routingProfiles;
 
   const ServerDetailsState._({
@@ -20,28 +20,31 @@ sealed class ServerDetailsState {
     required this.routingProfiles,
   });
 
-  const factory ServerDetailsState.initial() = _InitialServerDetailsState;
+  const factory ServerDetailsState.initial({
+    ServerData data,
+    ServerData initialData,
+  }) = _InitialServerDetailsState;
 
   /// Initial / idle state
   const factory ServerDetailsState.idle({
-    required ServerDetailsData data,
-    required ServerDetailsData initialData,
+    required ServerData data,
+    required ServerData initialData,
     required List<PresentationField> fieldErrors,
     required List<RoutingProfile> routingProfiles,
   }) = _IdleServerDetailsState;
 
   /// Loading state
   const factory ServerDetailsState.loading({
-    required ServerDetailsData data,
-    required ServerDetailsData initialData,
+    required ServerData data,
+    required ServerData initialData,
     required List<PresentationField> fieldErrors,
     required List<RoutingProfile> routingProfiles,
   }) = _LoadingServerDetailState;
 
   /// Error state
   const factory ServerDetailsState.exception({
-    required ServerDetailsData data,
-    required ServerDetailsData initialData,
+    required ServerData data,
+    required ServerData initialData,
     required List<PresentationField> fieldErrors,
     required PresentationError exception,
     required List<RoutingProfile> routingProfiles,
@@ -85,13 +88,13 @@ final class _IdleServerDetailsState extends ServerDetailsState {
 }
 
 final class _InitialServerDetailsState extends _IdleServerDetailsState {
-  const _InitialServerDetailsState()
-    : super(
-        data: const ServerDetailsData(),
-        initialData: const ServerDetailsData(),
-        fieldErrors: const [],
-        routingProfiles: const [],
-      );
+  const _InitialServerDetailsState({
+    super.data = const ServerData.empty(routingProfileId: RoutingProfileUtils.defaultRoutingProfileId),
+    super.initialData = const ServerData.empty(),
+  }) : super(
+         fieldErrors: const [],
+         routingProfiles: const [],
+       );
 }
 
 final class _LoadingServerDetailState extends ServerDetailsState {

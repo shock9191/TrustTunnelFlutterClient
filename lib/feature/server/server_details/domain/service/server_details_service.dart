@@ -2,30 +2,24 @@ import 'package:trusttunnel/common/error/model/enum/presentation_field_error_cod
 import 'package:trusttunnel/common/error/model/enum/presentation_field_name.dart';
 import 'package:trusttunnel/common/error/model/presentation_field.dart';
 import 'package:trusttunnel/common/utils/validation_utils.dart';
-import 'package:trusttunnel/data/model/raw/add_server_request.dart';
-import 'package:trusttunnel/data/model/server.dart';
-import 'package:trusttunnel/feature/server/server_details/model/server_details_data.dart';
+import 'package:trusttunnel/data/model/server_data.dart';
 
 abstract class ServerDetailsService {
   List<PresentationField> validateData({
-    required ServerDetailsData data,
+    required ServerData data,
     Set<String> otherServersNames = const {},
   });
-
-  AddServerRequest toAddServerRequest({required ServerDetailsData data});
-
-  ServerDetailsData toServerDetailsData({required Server server});
 }
 
 class ServerDetailsServiceImpl implements ServerDetailsService {
   @override
   List<PresentationField> validateData({
-    required ServerDetailsData data,
+    required ServerData data,
     Set<String> otherServersNames = const {},
   }) {
     final List<PresentationField> fields = [];
     final serverNameValidationResult = _validateServerName(
-      data.serverName,
+      data.name,
       otherServersNames,
     );
     if (serverNameValidationResult != null) {
@@ -62,34 +56,60 @@ class ServerDetailsServiceImpl implements ServerDetailsService {
       fields.add(dnsServersValidationResult);
     }
 
+    if (data.tlsPrefix != null) {
+      final clientRandomValidationResult = validateClientRandom(data.tlsPrefix!);
+      if (clientRandomValidationResult != null) {
+        fields.add(clientRandomValidationResult);
+      }
+    }
+
     return fields;
   }
 
-  @override
-  AddServerRequest toAddServerRequest({required ServerDetailsData data}) => (
-    username: data.username,
-    name: data.serverName,
-    ipAddress: data.ipAddress,
-    domain: data.domain,
-    password: data.password,
-    vpnProtocol: data.protocol,
-    dnsServers: data.dnsServers,
-    routingProfileId: data.routingProfileId,
-    customSni: data.customSni,
-  );
+  PresentationField? validateClientRandom(String value) {
+    final input = value.trim();
 
-  @override
-  ServerDetailsData toServerDetailsData({required Server server}) => ServerDetailsData(
-    serverName: server.name,
-    ipAddress: server.ipAddress,
-    domain: server.domain,
-    username: server.username,
-    password: server.password,
-    protocol: server.vpnProtocol,
-    routingProfileId: server.routingProfile.id,
-    dnsServers: server.dnsServers.cast<String>(),
-    customSni: server.customSni,
-  );
+    if (input.isEmpty) {
+      return null;
+    }
+
+    final parts = input.split('/');
+    if (parts.length > 2) {
+      return _getFieldWrongValue(PresentationFieldName.clientRandom);
+    }
+
+    final clientRandom = parts[0];
+    final mask = parts.length == 2 ? parts[1] : null;
+    final hexRegexp = RegExp(r'^[0-9A-Fa-f]+$');
+
+    if (!hexRegexp.hasMatch(clientRandom)) {
+      return _getFieldWrongValue(PresentationFieldName.clientRandom);
+    }
+
+    if (mask == null) {
+      if (!_isEvenLengthHex(clientRandom)) {
+        return _getFieldWrongValue(PresentationFieldName.clientRandomValue);
+      }
+
+      return null;
+    }
+
+    if (!hexRegexp.hasMatch(mask)) {
+      return _getFieldWrongValue(PresentationFieldName.clientRandom);
+    }
+
+    if (!_isEvenLengthHex(mask) || !_isEvenLengthHex(clientRandom)) {
+      return _getFieldWrongValue(PresentationFieldName.clientRandomMask);
+    }
+
+    if (clientRandom.length != mask.length) {
+      return _getFieldOutOfBounds(PresentationFieldName.clientRandom);
+    }
+
+    return null;
+  }
+
+  bool _isEvenLengthHex(String value) => value.isNotEmpty && value.length.isEven;
 
   PresentationField? _validateServerName(String serverName, Set<String> otherServerNames) {
     final fieldName = PresentationFieldName.serverName;
@@ -165,11 +185,10 @@ class ServerDetailsServiceImpl implements ServerDetailsService {
     final allowableRegex = RegExp(ValidationUtils.allowableStartRegex);
 
     for (var dnsServer in dnsServers) {
-      
       final rawServer = dnsServer;
       if (allowableRegex.hasMatch(dnsServer)) {
         final parsedUri = Uri.tryParse(dnsServer);
-        if (parsedUri != null) {
+        if (parsedUri != null && parsedUri.host.isNotEmpty) {
           dnsServer = parsedUri.host + (parsedUri.hasPort ? ':${parsedUri.port}' : '');
         }
       }
@@ -223,6 +242,11 @@ class ServerDetailsServiceImpl implements ServerDetailsService {
 
   PresentationField _getFieldWrongValue(PresentationFieldName fieldName) => PresentationField(
     code: PresentationFieldErrorCode.fieldWrongValue,
+    fieldName: fieldName,
+  );
+
+  PresentationField _getFieldOutOfBounds(PresentationFieldName fieldName) => PresentationField(
+    code: PresentationFieldErrorCode.outOfBounds,
     fieldName: fieldName,
   );
 }

@@ -1,27 +1,24 @@
 import 'package:flutter/foundation.dart';
-import 'package:meta/meta.dart';
 import 'package:trusttunnel/common/models/value_data.dart';
+import 'package:trusttunnel/data/model/certificate.dart';
 import 'package:trusttunnel/data/model/vpn_protocol.dart';
 
-/// {@template raw_server}
-/// Database-oriented representation of a VPN server record.
+/// {@template server}
+/// A fully resolved VPN server configuration used by the app.
 ///
-/// `RawServer` is similar to `Server`, but it references a routing profile by
-/// its identifier ([routingProfileId]) rather than embedding the full
-/// routing profile object. This shape is typically used by persistence layers
-/// and DTO-style conversions.
+/// `Server` combines server connection credentials and transport parameters
+/// with the associated []. This is a convenient domain model for
+/// UI and business logic where you need both server details and routing rules
+/// in one place.
 ///
 /// Instances are immutable and use value-based equality.
 /// {@endtemplate}
 @immutable
-class RawServer {
-  /// Database identifier of the server record.
-  final int id;
-
+class ServerData {
   /// User-visible server name.
   final String name;
 
-  /// Server IP address (usually IPv4/IPv6 literal).
+  /// Server IP address (usually IPv4/IPv6 literal as stored by the app).
   final String ipAddress;
 
   /// Server host name used for TLS (SNI / certificate verification).
@@ -41,17 +38,22 @@ class RawServer {
   /// The list is expected to be treated as immutable by callers.
   final List<String> dnsServers;
 
-  /// Identifier of the routing profile associated with this server.
-  final int routingProfileId;
+  /// Routing profile applied when connecting to this server.
+  final String routingProfileId;
 
   /// Whether this server is marked as the currently selected one.
   final bool selected;
 
+  final Certificate? certificate;
+
+  final bool ipv6;
+
+  final String? tlsPrefix;
+
   final String? customSni;
 
-  /// {@macro raw_server}
-  const RawServer({
-    required this.id,
+  /// {@macro server}
+  const ServerData({
     required this.name,
     required this.ipAddress,
     required this.domain,
@@ -60,14 +62,31 @@ class RawServer {
     required this.vpnProtocol,
     required this.dnsServers,
     required this.routingProfileId,
-    required this.customSni,
+    required this.ipv6,
+    this.certificate,
+    this.tlsPrefix,
+    this.customSni,
+    this.selected = false,
+  });
 
+  const ServerData.empty({
+    this.name = '',
+    this.ipAddress = '',
+    this.domain = '',
+    this.username = '',
+    this.password = '',
+    this.vpnProtocol = VpnProtocol.http2,
+    this.dnsServers = const [],
+    this.routingProfileId = '',
+    this.ipv6 = true,
+    this.certificate,
+    this.tlsPrefix,
+    this.customSni,
     this.selected = false,
   });
 
   @override
   int get hashCode => Object.hash(
-    id,
     name,
     ipAddress,
     domain,
@@ -77,30 +96,34 @@ class RawServer {
     Object.hashAll(dnsServers),
     routingProfileId,
     selected,
+    certificate,
+    ipv6,
+    tlsPrefix,
     customSni,
   );
 
   @override
   String toString() =>
-      'RawServer('
-      'id: $id, '
+      'ServerData('
       'name: $name, '
       'ipAddress: $ipAddress, '
       'domain: $domain, '
+      'customSni: $customSni, '
       'username: $username, '
       'vpnProtocol: $vpnProtocol, '
       'dnsServers: $dnsServers, '
-      'routingProfileId: $routingProfileId, '
-      'selected: $selected, '
-      'customSni: $customSni'
+      'routingProfile: $routingProfileId, '
+      'selected: $selected,'
+      'ipv6: $ipv6,'
+      'tlsPrefix: $tlsPrefix,'
+      'certificate: $certificate,'
       ')';
 
   @override
   bool operator ==(Object other) {
     if (identical(this, other)) return true;
 
-    return other is RawServer &&
-        other.id == id &&
+    return other is ServerData &&
         other.name == name &&
         other.ipAddress == ipAddress &&
         other.domain == domain &&
@@ -109,15 +132,17 @@ class RawServer {
         other.vpnProtocol == vpnProtocol &&
         listEquals(other.dnsServers, dnsServers) &&
         other.routingProfileId == routingProfileId &&
-        other.customSni == customSni &&
-        other.selected == selected;
+        other.selected == selected &&
+        other.ipv6 == ipv6 &&
+        other.tlsPrefix == tlsPrefix &&
+        other.certificate == certificate &&
+        other.customSni == customSni;
   }
 
   /// Creates a copy of this server with the given fields replaced.
   ///
   /// Fields that are not provided retain their original values.
-  RawServer copyWith({
-    int? id,
+  ServerData copyWith({
     String? name,
     String? ipAddress,
     String? domain,
@@ -125,11 +150,13 @@ class RawServer {
     String? password,
     VpnProtocol? vpnProtocol,
     List<String>? dnsServers,
-    int? routingProfileId,
+    String? routingProfileId,
     bool? selected,
+    bool? ipv6,
+    ValueData<Certificate>? certificate,
+    ValueData<String>? tlsPrefix,
     ValueData<String>? customSni,
-  }) => RawServer(
-    id: id ?? this.id,
+  }) => ServerData(
     name: name ?? this.name,
     ipAddress: ipAddress ?? this.ipAddress,
     domain: domain ?? this.domain,
@@ -139,6 +166,9 @@ class RawServer {
     dnsServers: dnsServers ?? this.dnsServers,
     routingProfileId: routingProfileId ?? this.routingProfileId,
     selected: selected ?? this.selected,
-    customSni: customSni == null ? this.customSni : customSni.value,
+    ipv6: ipv6 ?? this.ipv6,
+    certificate: certificate != null ? certificate.value : this.certificate,
+    tlsPrefix: tlsPrefix != null ? tlsPrefix.value : this.tlsPrefix,
+    customSni: customSni != null ? customSni.value : this.customSni,
   );
 }

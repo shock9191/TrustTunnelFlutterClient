@@ -4,10 +4,11 @@ import 'package:trusttunnel/common/controller/widget/state_consumer.dart';
 import 'package:trusttunnel/common/error/model/presentation_error.dart';
 import 'package:trusttunnel/common/error/model/presentation_field.dart';
 import 'package:trusttunnel/common/extensions/context_extensions.dart';
+import 'package:trusttunnel/common/utils/routing_profile_utils.dart';
 import 'package:trusttunnel/data/model/routing_profile.dart';
+import 'package:trusttunnel/data/model/server_data.dart';
 import 'package:trusttunnel/feature/server/server_details/controller/servers_details_controller.dart';
 import 'package:trusttunnel/feature/server/server_details/controller/servers_details_states.dart';
-import 'package:trusttunnel/feature/server/server_details/model/server_details_data.dart';
 import 'package:trusttunnel/feature/server/server_details/domain/service/server_details_service.dart';
 import 'package:trusttunnel/feature/server/server_details/widgets/scope/server_details_scope_aspect.dart';
 import 'package:trusttunnel/feature/server/server_details/widgets/scope/server_details_scope_controller.dart';
@@ -17,12 +18,14 @@ import 'package:trusttunnel/feature/server/server_details/widgets/scope/server_d
 /// {@endtemplate}
 class ServerDetailsScope extends StatefulWidget {
   final Widget child;
-  final int? serverId;
+  final ServerData? initialData;
+  final String? serverId;
 
   /// {@macro products_scope_template}
   const ServerDetailsScope({
     required this.child,
     required this.serverId,
+    this.initialData,
     super.key,
   });
 
@@ -50,6 +53,13 @@ class _ServerDetailsScopeState extends State<ServerDetailsScope> {
       repository: repositoryFactory.serverRepository,
       detailsService: ServerDetailsServiceImpl(),
       serverId: widget.serverId,
+      initialState: ServerDetailsState.initial(
+        data:
+            widget.initialData ??
+            const ServerData.empty().copyWith(
+              routingProfileId: RoutingProfileUtils.defaultRoutingProfileId,
+            ),
+      ),
     );
   }
 
@@ -64,6 +74,8 @@ class _ServerDetailsScopeState extends State<ServerDetailsScope> {
       submit: _controller.submit,
       editing: widget.serverId != null,
       id: widget.serverId,
+      pickPemCertificate: _controller.pickPemCertificate,
+      clearPemCertificate: _controller.clearPemCertificate,
       child: widget.child,
     ),
   );
@@ -77,6 +89,30 @@ class _ServerDetailsScopeState extends State<ServerDetailsScope> {
 
 class _InheritedServerDetailsScope extends InheritedModel<ServerDetailsScopeAspect>
     implements ServerDetailsScopeController {
+  @override
+  final bool editing;
+
+  @override
+  final String? id;
+
+  @override
+  final DataChangedCallback changeData;
+
+  @override
+  final void Function() fetchServer;
+
+  @override
+  final void Function() pickPemCertificate;
+
+  @override
+  final void Function() clearPemCertificate;
+
+  @override
+  final void Function(ValueChanged<String> onSaved) delete;
+
+  @override
+  final void Function(ValueChanged<String> onSaved) submit;
+
   final ServerDetailsState _state;
 
   const _InheritedServerDetailsScope({
@@ -87,29 +123,37 @@ class _InheritedServerDetailsScope extends InheritedModel<ServerDetailsScopeAspe
     required this.submit,
     required this.editing,
     required this.id,
+    required this.pickPemCertificate,
+    required this.clearPemCertificate,
     required super.child,
   }) : _state = state;
 
-  @override
-  final bool editing;
+  static _InheritedServerDetailsScope serversControllerOf(
+    BuildContext context, {
+    bool listen = true,
+    ServerDetailsScopeAspect? aspect,
+  }) => _productsScope(context, listen: listen, aspect: aspect) ?? _notFoundInheritedWidgetOfExactType();
+
+  static _InheritedServerDetailsScope? _productsScope(
+    BuildContext context, {
+    bool listen = true,
+    ServerDetailsScopeAspect? aspect,
+  }) => (listen
+      ? InheritedModel.inheritFrom<_InheritedServerDetailsScope>(
+          context,
+          aspect: aspect,
+        )
+      : context.getElementForInheritedWidgetOfExactType<_InheritedServerDetailsScope>()?.widget
+            as _InheritedServerDetailsScope?);
+
+  static Never _notFoundInheritedWidgetOfExactType<T extends InheritedModel<ServerDetailsScopeAspect>>() =>
+      throw ArgumentError(
+        'Inherited widget out of scope and not found of $T exact type',
+        'out_of_scope',
+      );
 
   @override
-  final int? id;
-
-  @override
-  final DataChangedCallback changeData;
-
-  @override
-  final void Function() fetchServer;
-
-  @override
-  final void Function(ValueChanged<String> onSaved) delete;
-
-  @override
-  final void Function(ValueChanged<String> onSaved) submit;
-
-  @override
-  ServerDetailsData get data => _state.data;
+  ServerData get data => _state.data;
 
   @override
   List<PresentationField> get fieldErrors => [..._state.fieldErrors];
@@ -120,8 +164,6 @@ class _InheritedServerDetailsScope extends InheritedModel<ServerDetailsScopeAspe
   @override
   PresentationError? get error => _state.error;
 
-  // TODO: Rework it later
-  // Konstantin Gorynin <k.gorynin@adguard.com>, 14 December 2025
   @override
   bool get loading => _state.loading || routingProfiles.isEmpty;
 
@@ -130,12 +172,6 @@ class _InheritedServerDetailsScope extends InheritedModel<ServerDetailsScopeAspe
 
   @override
   bool updateShouldNotify(_InheritedServerDetailsScope oldWidget) => _state != oldWidget._state;
-
-  static _InheritedServerDetailsScope serversControllerOf(
-    BuildContext context, {
-    bool listen = true,
-    ServerDetailsScopeAspect? aspect,
-  }) => _productsScope(context, listen: listen, aspect: aspect) ?? _notFoundInheritedWidgetOfExactType();
 
   @override
   bool updateShouldNotifyDependent(
@@ -162,22 +198,4 @@ class _InheritedServerDetailsScope extends InheritedModel<ServerDetailsScopeAspe
 
     return false;
   }
-
-  static _InheritedServerDetailsScope? _productsScope(
-    BuildContext context, {
-    bool listen = true,
-    ServerDetailsScopeAspect? aspect,
-  }) => (listen
-      ? InheritedModel.inheritFrom<_InheritedServerDetailsScope>(
-          context,
-          aspect: aspect,
-        )
-      : context.getElementForInheritedWidgetOfExactType<_InheritedServerDetailsScope>()?.widget
-            as _InheritedServerDetailsScope?);
-
-  static Never _notFoundInheritedWidgetOfExactType<T extends InheritedModel<ServerDetailsScopeAspect>>() =>
-      throw ArgumentError(
-        'Inherited widget out of scope and not found of $T exact type',
-        'out_of_scope',
-      );
 }
