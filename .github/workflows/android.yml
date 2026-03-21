@@ -34,7 +34,7 @@ jobs:
     - name: Build APK
       run: |
         export GPR_KEY=${{ secrets.GPR_KEY }}
-        flutter build apk --debug --no-shrink --dart-define=GPR_KEY=${{ secrets.GPR_KEY }}
+        flutter build apk --debug --no-shrink --dart-define=GPR_KEY=${{ secrets.GPR_KEY }} -PSTORE_FILE=debug.keystore
       env:
         GPR_KEY: ${{ secrets.GPR_KEY }}
 
