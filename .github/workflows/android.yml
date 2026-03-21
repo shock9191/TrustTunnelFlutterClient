@@ -30,7 +30,6 @@ jobs:
       run: |
         flutter pub get
         # Force generation of localization files specifically
-        flutter gen-l10n 
       env:
         GPR_KEY: ${{ secrets.GPR_KEY }}
 
