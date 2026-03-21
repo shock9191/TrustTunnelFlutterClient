@@ -11,57 +11,44 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
-    - uses: actions/checkout@v4
+      - uses: actions/checkout@v4
 
-    - name: Set up Java
-      uses: actions/setup-java@v4
-      with:
-        java-version: '17'
-        distribution: 'temurin'
+      - name: Set up Java
+        uses: actions/setup-java@v4
+        with:
+          java-version: '17'
+          distribution: 'temurin'
 
-    - name: Set up Flutter
-      uses: subosito/flutter-action@v2
-      with:
-        # Using 3.24.3 ensures we meet your project's Dart 3.10.1 requirement
-        flutter-version: '3.38.3'
-        channel: 'stable'
-        cache: true
+      - name: Set up Flutter
+        uses: subosito/flutter-action@v2
+        with:
+          flutter-version: '3.38.3'
+          channel: 'stable'
+          cache: true
 
-    - name: Get dependencies
-      run: |
-        # 1. Create dummy files to satisfy the imports that are crashing the compiler
-        mkdir -p lib/common/localization/generated
-        mkdir -p plugins/vpn_plugin/lib
-        
-        # We add minimal valid Dart code to these 'ghost' files so the build proceeds
-        echo "class AppLocalizations { static get current => null; static of(context) => null; }" > lib/common/localization/generated/l10n.dart
-        echo "library vpn_plugin_platform_interface;" > plugins/vpn_plugin/lib/platform_api.g.dart
-        
-        # 2. Fetch packages
-        flutter pub get
-      env:
-        GPR_KEY: ${{ secrets.GPR_KEY }}
+      - name: Get dependencies
+        run: flutter pub get
+        env:
+          GPR_KEY: ${{ secrets.GPR_KEY }}
 
-    - name: Build APK
-      run: |
-        export GPR_KEY=${{ secrets.GPR_KEY }}
-        
-        # Clean the build environment
-        flutter clean
-        flutter pub get
-        
-        # Run build_runner but allow it to 'fail' without stopping the whole build
-        flutter pub run build_runner build --delete-conflicting-outputs || true
-        
-        # Build the APK using the system's default debug keystore to prevent the 'null' error
-        flutter build apk --debug --no-shrink \
-          --dart-define=GPR_KEY=${{ secrets.GPR_KEY }} \
-          -PSTORE_FILE=/usr/local/lib/android/sdk/debug.keystore
-      env:
-        GPR_KEY: ${{ secrets.GPR_KEY }}
+      - name: Generate localization
+        run: flutter gen-l10n
 
-    - name: Upload APK
-      uses: actions/upload-artifact@v4
-      with:
-        name: trust-tunnel-fixed
-        path: build/app/outputs/flutter-apk/app-debug.apk
+      - name: Generate dart code (build_runner)
+        run: flutter pub run build_runner build --delete-conflicting-outputs
+
+      - name: Build APK
+        run: |
+          export GPR_KEY=${{ secrets.GPR_KEY }}
+          flutter clean
+          flutter pub get
+          flutter build apk --debug --no-shrink \
+            --dart-define=GPR_KEY=${{ secrets.GPR_KEY }}
+        env:
+          GPR_KEY: ${{ secrets.GPR_KEY }}
+
+      - name: Upload APK
+        uses: actions/upload-artifact@v4
+        with:
+          name: trust-tunnel-fixed
+          path: build/app/outputs/flutter-apk/app-debug.apk
