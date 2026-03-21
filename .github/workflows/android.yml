@@ -22,7 +22,7 @@ jobs:
     - name: Set up Flutter
       uses: subosito/flutter-action@v2
       with:
-        flutter-version: '3.24.3' # Adjusted to a very stable version
+        flutter-version: '3.41.0' # Adjusted to a very stable version
         channel: 'stable'
         cache: true
 
