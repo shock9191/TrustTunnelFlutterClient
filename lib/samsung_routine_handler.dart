@@ -14,42 +14,59 @@ class SamsungRoutineHandler {
       // Delay to ensure the Flutter engine and VPN services are fully awake
       await Future.delayed(const Duration(seconds: 1));
 
-      // --- ACTION 1: CONNECT TO WORK SERVER ---
       if (shortcutType == 'connect_work_server') {
-        final servers = await serverRepository.getAllServers(); 
-        
-        final myWorkServer = servers.firstWhere(
-          (s) => s.serverData.name == 'server',
-          orElse: () => null as dynamic, 
-        );
-
-        if (myWorkServer != null) {
-          await serverRepository.setSelectedServerId(id: myWorkServer.id);
-
-          final routingProfile = await routingRepository.getProfileById(
-            id: myWorkServer.serverData.routingProfileId,
+        try {
+          final servers = await serverRepository.getAllServers(); 
+          if (servers.isEmpty) return; // Exit if no servers exist at all
+          
+          // Try to find "server", ignoring case and spaces
+          var myWorkServer = servers.firstWhere(
+            (s) => s.serverData.name.toLowerCase().trim() == 'server',
+            orElse: () => null as dynamic, 
           );
-          final excludedRoutes = await settingsRepository.getExcludedRoutes();
 
-          if (routingProfile != null) {
-             await vpnRepository.startListenToStates(
-               server: myWorkServer,
-               routingProfile: routingProfile,
-               excludedRoutes: excludedRoutes,
-             );
+          // FALLBACK: If "server" wasn't found, just use the first server in the list
+          // This ensures the button does *something* instead of silently failing
+          myWorkServer ??= servers.first;
+
+          if (myWorkServer != null) {
+            await serverRepository.setSelectedServerId(id: myWorkServer.id);
+
+            // Fetch the routing profile
+            var routingProfile = await routingRepository.getProfileById(
+              id: myWorkServer.serverData.routingProfileId,
+            );
+
+            // FALLBACK: If the profile is null, grab the first available profile
+            if (routingProfile == null) {
+              final allProfiles = await routingRepository.getAllProfiles();
+              if (allProfiles.isNotEmpty) {
+                routingProfile = allProfiles.first;
+              }
+            }
+
+            final excludedRoutes = await settingsRepository.getExcludedRoutes();
+
+            // Finally, start the VPN!
+            if (routingProfile != null) {
+               await vpnRepository.startListenToStates(
+                 server: myWorkServer,
+                 routingProfile: routingProfile,
+                 excludedRoutes: excludedRoutes ?? [],
+               );
+            }
           }
+        } catch (e) {
+          // Ignore errors so the app doesn't crash
         }
       } 
       
-      // --- ACTION 2: DISCONNECT VPN ---
       else if (shortcutType == 'disconnect_vpn') {
-        // Calling stop() directly on the repository terminates the active connection
         await vpnRepository.stop();
       }
       
     });
 
-    // Register BOTH shortcuts with the Android OS
     _quickActions.setShortcutItems(<ShortcutItem>[
       const ShortcutItem(
         type: 'connect_work_server',
