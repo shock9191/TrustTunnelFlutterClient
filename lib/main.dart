@@ -1,8 +1,11 @@
 import 'dart:async';
 import 'dart:developer';
-import 'samsung_routine_handler.dart';
+
 import 'package:flutter/material.dart' hide Router;
 import 'package:flutter/material.dart';
+
+import 'samsung_routine_handler.dart';
+
 import 'package:trusttunnel/di/model/initialization_helper.dart';
 import 'package:trusttunnel/di/widgets/dependency_scope.dart';
 import 'package:trusttunnel/feature/app/app.dart';
@@ -13,43 +16,48 @@ import 'package:trusttunnel/feature/settings/excluded_routes/widgets/scope/exclu
 import 'package:trusttunnel/feature/vpn/widgets/vpn_scope.dart';
 import 'package:trusttunnel/feature/vpn/widgets/vpn_update_manager.dart';
 
-
 void main() => runZonedGuarded(
-  () async {
-    WidgetsFlutterBinding.ensureInitialized();
-    final initializationResult = await InitializationHelperIo().init();
+      () async {
+        WidgetsFlutterBinding.ensureInitialized();
 
-    SamsungRoutineHandler.init();
+        final initializationResult = await InitializationHelperIo().init();
 
-    runApp(
-      DependencyScope(
-        dependenciesFactory: initializationResult.dependenciesFactory,
-        repositoryFactory: initializationResult.repositoryFactory,
-        child: ServersScope(
-          child: RoutingScope(
-            child: ExcludedRoutesScope(
-              child: VpnScope(
-                vpnRepository: initializationResult.repositoryFactory.vpnRepository,
-                initialState: initializationResult.initialVpnState,
-                child: const VpnUpdateManager(
-                  child: DeepLinkScope(
-                    child: SamsungRoutineListenerWidget(
-                      child: App(),
+        // Set up dynamic quick actions.
+        SamsungRoutineHandler.init();
+
+        // Pull static shortcut type from MainActivity (launcher shortcuts / tiles).
+        await AndroidShortcutBootstrap.init();
+
+        runApp(
+          DependencyScope(
+            dependenciesFactory: initializationResult.dependenciesFactory,
+            repositoryFactory: initializationResult.repositoryFactory,
+            child: ServersScope(
+              child: RoutingScope(
+                child: ExcludedRoutesScope(
+                  child: VpnScope(
+                    vpnRepository:
+                        initializationResult.repositoryFactory.vpnRepository,
+                    initialState: initializationResult.initialVpnState,
+                    child: const VpnUpdateManager(
+                      child: DeepLinkScope(
+                        child: SamsungRoutineListenerWidget(
+                          child: App(),
+                        ),
+                      ),
                     ),
                   ),
                 ),
               ),
             ),
           ),
-        ),
-      ),
+        );
+      },
+      (e, st) {
+        log(
+          'Error catched in main thread',
+          error: e,
+          stackTrace: st,
+        );
+      },
     );
-  },
-  (e, st) {
-    log(
-      'Error catched in main thread',
-      error: e,
-      stackTrace: st,
-    );
-  },
-);
