@@ -38,7 +38,6 @@ class SamsungRoutineListenerWidget extends StatefulWidget {
 
 class _SamsungRoutineListenerWidgetState extends State<SamsungRoutineListenerWidget> {
   StreamSubscription? _routineSubscription;
-  final _moveToBgPlugin = MoveToBg();
 
   @override
   void initState() {
@@ -57,37 +56,32 @@ class _SamsungRoutineListenerWidgetState extends State<SamsungRoutineListenerWid
   void _handleToggleAction() {
     try {
       final vpnController = VpnScope.vpnControllerOf(context, listen: false);
-      
-      // FIXED: If it's anything other than actively 'connected', turn it ON.
-      if (vpnController.state != VpnState.connected) {
+      if (vpnController.state == VpnState.disconnected) {
         _handleConnectAction();
       } else {
         _handleDisconnectAction();
       }
     } catch (e) {
-      // Ignore
+      _closeApp();
     }
   }
 
   void _handleConnectAction() async {
     try {
-      // 1. Grab everything from context immediately so it doesn't break later
       final serversController = ServersScope.controllerOf(context, listen: false);
-      final routingController = RoutingScope.controllerOf(context, listen: false);
-      final excludedRoutes = ExcludedRoutesScope.controllerOf(context, listen: false).excludedRoutes;
-      final vpnController = VpnScope.vpnControllerOf(context, listen: false);
       
-      // 2. COLD START FIX: Just wait 2 seconds if the database hasn't loaded yet.
-      if (serversController.servers.isEmpty || routingController.routingList.isEmpty) {
-        await Future.delayed(const Duration(seconds: 2));
+      // Wait up to 3 seconds for database to load on Cold Start
+      for (int i = 0; i < 6; i++) {
+        if (serversController.servers.isNotEmpty) break;
+        await Future.delayed(const Duration(milliseconds: 500));
       }
 
-      // 3. Re-check the lists. If still empty, abort safely.
       final servers = serversController.servers;
-      final routingList = routingController.routingList;
-      if (servers.isEmpty || routingList.isEmpty) return; 
-      
-      // 4. Safe connection logic
+      if (servers.isEmpty) {
+        _closeApp();
+        return;
+      }
+
       final targetServer = servers.firstWhere(
         (s) => s.serverData.name.toLowerCase().trim() == 'server',
         orElse: () => servers.first,
@@ -95,10 +89,20 @@ class _SamsungRoutineListenerWidgetState extends State<SamsungRoutineListenerWid
 
       serversController.pickServer(targetServer.id);
 
+      final routingController = RoutingScope.controllerOf(context, listen: false);
+      final routingList = routingController.routingList;
+      if (routingList.isEmpty) {
+        _closeApp();
+        return;
+      }
+
       final routingProfile = routingList.firstWhere(
         (element) => element.id == targetServer.serverData.routingProfileId,
         orElse: () => routingList.first, 
       );
+
+      final excludedRoutes = ExcludedRoutesScope.controllerOf(context, listen: false).excludedRoutes;
+      final vpnController = VpnScope.vpnControllerOf(context, listen: false);
       
       await vpnController.start(
         server: targetServer,
@@ -107,20 +111,30 @@ class _SamsungRoutineListenerWidgetState extends State<SamsungRoutineListenerWid
       );
 
     } catch (e) {
-      // Silently ignore to prevent app crashes
-    } finally {
-      // 5. FIXED: ALWAYS move to background, ensuring the app closes no matter what.
-      await _moveToBgPlugin.moveTaskToBack();
-    }
+      // Ignore errors silently
+    } 
+    
+    // Always execute the close function regardless of success or error
+    _closeApp();
   }
 
   void _handleDisconnectAction() async {
     try {
       VpnScope.vpnControllerOf(context, listen: false).stop();
     } catch (e) {
-      // Ignore
-    } finally {
-      await _moveToBgPlugin.moveTaskToBack();
+      // Ignore errors silently
+    }
+    
+    _closeApp();
+  }
+
+  // Protected Background Function
+  void _closeApp() async {
+    try {
+      await Future.delayed(const Duration(milliseconds: 500));
+      await MoveToBg.moveTaskToBack();
+    } catch (e) {
+      // Failsafe
     }
   }
 
