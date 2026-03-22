@@ -23,4 +23,16 @@
             android:targetPackage="com.adguard.trusttunnel"
             android:targetClass="com.adguard.trusttunnel.MainActivity" />
     </shortcut>
+
+    <shortcut
+        android:shortcutId="toggle_vpn"
+        android:enabled="true"
+        android:icon="@mipmap/ic_launcher"
+        android:shortcutShortLabel="@string/toggle_label"
+        android:shortcutLongLabel="@string/toggle_label">
+        <intent
+            android:action="android.intent.action.VIEW"
+            android:targetPackage="com.adguard.trusttunnel"
+            android:targetClass="com.adguard.trusttunnel.MainActivity" />
+    </shortcut>
 </shortcuts>

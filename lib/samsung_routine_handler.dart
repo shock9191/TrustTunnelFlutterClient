@@ -2,9 +2,9 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:quick_actions/quick_actions.dart';
 import 'package:move_to_bg/move_to_bg.dart';
+import 'package:trusttunnel/data/model/vpn_state.dart'; // ADDED THIS IMPORT
 import 'package:trusttunnel/feature/server/servers/widget/scope/servers_scope.dart';
 import 'package:trusttunnel/feature/vpn/widgets/vpn_scope.dart';
-// ADDED THESE TWO IMPORTS
 import 'package:trusttunnel/feature/routing/routing/widgets/scope/routing_scope.dart';
 import 'package:trusttunnel/feature/settings/excluded_routes/widgets/scope/excluded_routes_scope.dart';
 
@@ -28,6 +28,11 @@ class SamsungRoutineHandler {
       const ShortcutItem(
         type: 'disconnect_vpn',
         localizedTitle: 'Disconnect VPN',
+        icon: 'ic_launcher',
+      ),
+      const ShortcutItem(
+        type: 'toggle_vpn', // ADDED TOGGLE SHORTCUT
+        localizedTitle: 'Toggle VPN',
         icon: 'ic_launcher',
       ),
     ]);
@@ -55,8 +60,21 @@ class _SamsungRoutineListenerWidgetState extends State<SamsungRoutineListenerWid
         _handleConnectAction();
       } else if (action == 'disconnect_vpn') {
         _handleDisconnectAction();
+      } else if (action == 'toggle_vpn') {
+        _handleToggleAction(); // ADDED TOGGLE HANDLER
       }
     });
+  }
+
+  // NEW METHOD: Checks state and routes to connect or disconnect
+  void _handleToggleAction() {
+    final vpnController = VpnScope.vpnControllerOf(context, listen: false);
+    
+    if (vpnController.state == VpnState.disconnected) {
+      _handleConnectAction();
+    } else {
+      _handleDisconnectAction();
+    }
   }
 
   void _handleConnectAction() async {
@@ -70,19 +88,16 @@ class _SamsungRoutineListenerWidgetState extends State<SamsungRoutineListenerWid
         orElse: () => servers.first,
       );
 
-      // 1. Mark the server as selected in the UI
       serversController.pickServer(targetServer.id);
 
-      // 2. Fetch the required parameters from the UI scopes
       final routingList = RoutingScope.controllerOf(context, listen: false).routingList;
       final routingProfile = routingList.firstWhere(
         (element) => element.id == targetServer.serverData.routingProfileId,
-        orElse: () => routingList.first, // Fallback to first profile
+        orElse: () => routingList.first, 
       );
 
       final excludedRoutes = ExcludedRoutesScope.controllerOf(context, listen: false).excludedRoutes;
 
-      // 3. EXPLICITLY START THE VPN!
       final vpnController = VpnScope.vpnControllerOf(context, listen: false);
       await vpnController.start(
         server: targetServer,
@@ -93,7 +108,6 @@ class _SamsungRoutineListenerWidgetState extends State<SamsungRoutineListenerWid
     } catch (e) {
       // Ignore errors silently to prevent crashes
     } finally {
-      // 4. Immediately push the app back to the background
       await _moveToBgPlugin.moveTaskToBack();
     }
   }

@@ -2,4 +2,5 @@
 <resources>
     <string name="connect_label">Connect to Work Server</string>
     <string name="disconnect_label">Disconnect VPN</string>
+    <string name="toggle_label">Toggle VPN</string>
 </resources>
