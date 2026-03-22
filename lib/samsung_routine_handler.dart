@@ -12,7 +12,6 @@ class SamsungRoutineHandler {
 
   static void init() {
     _quickActions.initialize((String shortcutType) async {
-      // Delay to ensure the UI tree is fully built before sending the signal
       await Future.delayed(const Duration(seconds: 1));
       _actionStream.add(shortcutType);
     });
@@ -32,8 +31,6 @@ class SamsungRoutineHandler {
   }
 }
 
-/// An invisible widget that wraps the main App() to catch shortcut intents.
-/// This prevents us from having to modify trusttunnel's core UI files.
 class SamsungRoutineListenerWidget extends StatefulWidget {
   final Widget child;
 
@@ -45,6 +42,7 @@ class SamsungRoutineListenerWidget extends StatefulWidget {
 
 class _SamsungRoutineListenerWidgetState extends State<SamsungRoutineListenerWidget> {
   StreamSubscription? _routineSubscription;
+  final _moveToBgPlugin = MoveToBg(); // Declared the plugin correctly
 
   @override
   void initState() {
@@ -58,33 +56,30 @@ class _SamsungRoutineListenerWidgetState extends State<SamsungRoutineListenerWid
     });
   }
 
-  void _handleConnectAction() {
-    // 1. Get the official UI state controller
+  // Added async keyword
+  void _handleConnectAction() async {
     final serversController = ServersScope.controllerOf(context, listen: false);
     
-    // 2. Fetch the servers directly from the scope controller
     final servers = serversController.servers;
     if (servers.isEmpty) return;
     
-    // 3. Find the target server
     final targetServer = servers.firstWhere(
       (s) => s.serverData.name.toLowerCase().trim() == 'server',
       orElse: () => servers.first,
     );
 
-    // 4. Emulate a physical tap using the correct method name
     serversController.pickServer(targetServer.id);
 
-    // 5. Immediately push the app back to the background
-    MoveToBg.moveTaskToBack();
+    // Fixed minimize command
+    await _moveToBgPlugin.moveTaskToBack();
   }
 
-  void _handleDisconnectAction() {
-    // 1. Calling stop() on the main VpnScope exactly like the UI does
+  // Added async keyword
+  void _handleDisconnectAction() async {
     VpnScope.vpnControllerOf(context, listen: false).stop();
 
-    // 2. Immediately push the app back to the background
-    MoveToBg.moveTaskToBack();
+    // Fixed minimize command
+    await _moveToBgPlugin.moveTaskToBack();
   }
 
   @override
@@ -95,7 +90,6 @@ class _SamsungRoutineListenerWidgetState extends State<SamsungRoutineListenerWid
 
   @override
   Widget build(BuildContext context) {
-    // This widget renders absolutely nothing of its own; it just passes the app through.
     return widget.child;
   }
 }
