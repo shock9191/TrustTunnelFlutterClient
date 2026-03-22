@@ -3,13 +3,11 @@ import 'package:flutter/material.dart';
 import 'package:quick_actions/quick_actions.dart';
 import 'package:move_to_bg/move_to_bg.dart';
 
-// We import the direct dependencies instead of the UI Scopes
-import 'package:trusttunnel/core/di/di.dart';
 import 'package:trusttunnel/data/model/vpn_state.dart';
-import 'package:trusttunnel/domain/repository/vpn_repository.dart';
-import 'package:trusttunnel/domain/repository/servers_repository.dart';
-import 'package:trusttunnel/domain/repository/routing_repository.dart';
-import 'package:trusttunnel/domain/repository/settings_repository.dart';
+import 'package:trusttunnel/feature/server/servers/widget/scope/servers_scope.dart';
+import 'package:trusttunnel/feature/vpn/widgets/vpn_scope.dart';
+import 'package:trusttunnel/feature/routing/routing/widgets/scope/routing_scope.dart';
+import 'package:trusttunnel/feature/settings/excluded_routes/widgets/scope/excluded_routes_scope.dart';
 
 class SamsungRoutineHandler {
   static final QuickActions _quickActions = const QuickActions();
@@ -18,7 +16,6 @@ class SamsungRoutineHandler {
 
   static void init() {
     _quickActions.initialize((String shortcutType) async {
-      // Small delay to ensure DI is ready
       await Future.delayed(const Duration(milliseconds: 500));
       _actionStream.add(shortcutType);
     });
@@ -41,7 +38,6 @@ class SamsungRoutineListenerWidget extends StatefulWidget {
 
 class _SamsungRoutineListenerWidgetState extends State<SamsungRoutineListenerWidget> {
   StreamSubscription? _routineSubscription;
-  final _moveToBgPlugin = MoveToBg();
 
   @override
   void initState() {
@@ -51,7 +47,7 @@ class _SamsungRoutineListenerWidgetState extends State<SamsungRoutineListenerWid
     });
   }
 
-  // Master execution function that guarantees backgrounding
+  // The Master Wrapper: This guarantees the app goes to the background no matter what happens.
   void _executeAction(String action) async {
     try {
       if (action == 'connect_work_server') {
@@ -62,80 +58,87 @@ class _SamsungRoutineListenerWidgetState extends State<SamsungRoutineListenerWid
         await _handleToggleAction();
       }
     } finally {
-      // Guaranteed to fire, no matter what happens in the logic above
+      // Small wait to ensure VPN commands fired, then force background
       await Future.delayed(const Duration(milliseconds: 500));
-      await _moveToBgPlugin.moveTaskToBack();
+      final moveToBgPlugin = MoveToBg();
+      await moveToBgPlugin.moveTaskToBack();
     }
+  }
+
+  // Safe Waiting Room for Cold Starts
+  Future<bool> _waitForAppToInitialize() async {
+    for (int i = 0; i < 10; i++) {
+      try {
+        if (!mounted) return false;
+        
+        final servers = ServersScope.controllerOf(context, listen: false).servers;
+        final routingList = RoutingScope.controllerOf(context, listen: false).routingList;
+        VpnScope.vpnControllerOf(context, listen: false); // Touch to ensure it exists
+        
+        if (servers.isNotEmpty && routingList.isNotEmpty) {
+          return true; // Everything loaded perfectly
+        }
+      } catch (e) {
+        // App still booting, Scopes not found yet. Keep looping.
+      }
+      await Future.delayed(const Duration(milliseconds: 500));
+    }
+    return false;
   }
 
   Future<void> _handleToggleAction() async {
-    try {
-      // Get the VPN Repository directly from Dependency Injection (no context needed!)
-      final vpnRepo = getIt<VpnRepository>();
-      final state = vpnRepo.state.value;
-      
-      if (state == VpnState.disconnected) {
-        await _handleConnectAction();
-      } else {
-        await _handleDisconnectAction();
-      }
-    } catch (e) {
-      // Ignore
+    bool isReady = await _waitForAppToInitialize();
+    if (!isReady) return;
+
+    final vpnController = VpnScope.vpnControllerOf(context, listen: false);
+    if (vpnController.state == VpnState.disconnected) {
+      await _handleConnectAction(skipInitCheck: true);
+    } else {
+      await _handleDisconnectAction();
     }
   }
 
-  Future<void> _handleConnectAction() async {
+  Future<void> _handleConnectAction({bool skipInitCheck = false}) async {
+    if (!skipInitCheck) {
+      bool isReady = await _waitForAppToInitialize();
+      if (!isReady) return;
+    }
+
     try {
-      // Fetch core dependencies via getIt instead of Provider Scopes
-      final serversRepo = getIt<ServersRepository>();
-      final routingRepo = getIt<RoutingRepository>();
-      final settingsRepo = getIt<SettingsRepository>();
-      final vpnRepo = getIt<VpnRepository>();
-
-      // Wait a moment for the database stream to emit its first list if starting cold
-      int retries = 0;
-      while (serversRepo.servers.value.isEmpty && retries < 10) {
-        await Future.delayed(const Duration(milliseconds: 200));
-        retries++;
-      }
-
-      final servers = serversRepo.servers.value;
-      if (servers.isEmpty) return; // DB empty, abort.
-
+      final serversController = ServersScope.controllerOf(context, listen: false);
+      final servers = serversController.servers;
+      
       final targetServer = servers.firstWhere(
         (s) => s.serverData.name.toLowerCase().trim() == 'server',
         orElse: () => servers.first,
       );
 
-      // Force save the active server directly to the database
-      await serversRepo.saveActiveServerId(targetServer.id);
+      serversController.pickServer(targetServer.id);
 
-      final routingList = routingRepo.routingProfiles.value;
+      final routingList = RoutingScope.controllerOf(context, listen: false).routingList;
       final routingProfile = routingList.firstWhere(
         (element) => element.id == targetServer.serverData.routingProfileId,
-        orElse: () => routingList.isNotEmpty ? routingList.first : throw Exception("No routing"),
+        orElse: () => routingList.first, 
       );
 
-      final excludedRoutes = settingsRepo.excludedRoutes.value;
-
-      // Start the VPN
-      await vpnRepo.start(
+      final excludedRoutes = ExcludedRoutesScope.controllerOf(context, listen: false).excludedRoutes;
+      final vpnController = VpnScope.vpnControllerOf(context, listen: false);
+      
+      await vpnController.start(
         server: targetServer,
         routingProfile: routingProfile,
         excludedRoutes: excludedRoutes,
       );
-
     } catch (e) {
-      // If it fails, the finally block in _executeAction still pushes to background.
+      // Let the finally block handle it
     }
   }
 
   Future<void> _handleDisconnectAction() async {
     try {
-      final vpnRepo = getIt<VpnRepository>();
-      await vpnRepo.stop();
+      VpnScope.vpnControllerOf(context, listen: false).stop();
     } catch (e) {
-      // Ignore
+      // Let the finally block handle it
     }
   }
 
