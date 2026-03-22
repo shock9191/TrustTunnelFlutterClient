@@ -132,7 +132,8 @@ class _SamsungRoutineListenerWidgetState extends State<SamsungRoutineListenerWid
   void _closeApp() async {
     try {
       await Future.delayed(const Duration(milliseconds: 500));
-      await MoveToBg.moveTaskToBack();
+      final moveToBg = MoveToBg(); // FIXED: Initialized the plugin correctly
+      await moveToBg.moveTaskToBack();
     } catch (e) {
       // Failsafe
     }
