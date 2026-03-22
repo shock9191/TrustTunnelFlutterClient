@@ -28,11 +28,18 @@
                 <category android:name="android.intent.category.BROWSABLE" />
                 <data android:scheme="tt"/>
             </intent-filter>
+
+            <!-- STATIC SHORTCUTS LINK ADDED HERE -->
+            <meta-data 
+                android:name="android.app.shortcuts" 
+                android:resource="@xml/shortcuts" />
         </activity>
+        
         <meta-data
             android:name="flutterEmbedding"
             android:value="2" />
     </application>
+    
     <queries>
         <intent>
             <action android:name="android.intent.action.PROCESS_TEXT"/>

@@ -1,0 +1,26 @@
+<?xml version="1.0" encoding="utf-8"?>
+<shortcuts xmlns:android="http://schemas.android.com/apk/res/android">
+    <shortcut
+        android:shortcutId="connect_work_server"
+        android:enabled="true"
+        android:icon="@mipmap/ic_launcher"
+        android:shortcutShortLabel="@string/connect_label"
+        android:shortcutLongLabel="@string/connect_label">
+        <intent
+            android:action="android.intent.action.VIEW"
+            android:targetPackage="com.adguard.trusttunnel"
+            android:targetClass="com.adguard.trusttunnel.MainActivity" />
+    </shortcut>
+
+    <shortcut
+        android:shortcutId="disconnect_vpn"
+        android:enabled="true"
+        android:icon="@mipmap/ic_launcher"
+        android:shortcutShortLabel="@string/disconnect_label"
+        android:shortcutLongLabel="@string/disconnect_label">
+        <intent
+            android:action="android.intent.action.VIEW"
+            android:targetPackage="com.adguard.trusttunnel"
+            android:targetClass="com.adguard.trusttunnel.MainActivity" />
+    </shortcut>
+</shortcuts>
