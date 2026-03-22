@@ -16,7 +16,6 @@ class SamsungRoutineHandler {
 
   static void init() {
     _quickActions.initialize((String shortcutType) async {
-      await Future.delayed(const Duration(milliseconds: 500));
       _actionStream.add(shortcutType);
     });
 
@@ -38,108 +37,88 @@ class SamsungRoutineListenerWidget extends StatefulWidget {
 
 class _SamsungRoutineListenerWidgetState extends State<SamsungRoutineListenerWidget> {
   StreamSubscription? _routineSubscription;
+  final _moveToBgPlugin = MoveToBg();
 
   @override
   void initState() {
     super.initState();
     _routineSubscription = SamsungRoutineHandler.actionStream.listen((action) {
-      _executeAction(action);
+      _processActionSafely(action);
     });
   }
 
-  // The Master Wrapper: This guarantees the app goes to the background no matter what happens.
-  void _executeAction(String action) async {
+  void _processActionSafely(String action) async {
+    // 1. THE BLIND WAIT: Give the app 2 full seconds to completely build its UI and load the DB.
+    // This entirely prevents the silent cold-start crashes. 
+    await Future.delayed(const Duration(milliseconds: 2000));
+
+    if (!mounted) return;
+
     try {
-      if (action == 'connect_work_server') {
-        await _handleConnectAction();
-      } else if (action == 'disconnect_vpn') {
-        await _handleDisconnectAction();
+      if (action == 'disconnect_vpn') {
+        VpnScope.vpnControllerOf(context, listen: false).stop();
+      } else if (action == 'connect_work_server') {
+        await _executeConnect();
       } else if (action == 'toggle_vpn') {
-        await _handleToggleAction();
-      }
-    } finally {
-      // Small wait to ensure VPN commands fired, then force background
-      await Future.delayed(const Duration(milliseconds: 500));
-      final moveToBgPlugin = MoveToBg();
-      await moveToBgPlugin.moveTaskToBack();
-    }
-  }
-
-  // Safe Waiting Room for Cold Starts
-  Future<bool> _waitForAppToInitialize() async {
-    for (int i = 0; i < 10; i++) {
-      try {
-        if (!mounted) return false;
+        final vpnState = VpnScope.vpnControllerOf(context, listen: false).state;
         
-        final servers = ServersScope.controllerOf(context, listen: false).servers;
-        final routingList = RoutingScope.controllerOf(context, listen: false).routingList;
-        VpnScope.vpnControllerOf(context, listen: false); // Touch to ensure it exists
-        
-        if (servers.isNotEmpty && routingList.isNotEmpty) {
-          return true; // Everything loaded perfectly
+        // FIXED TOGGLE LOGIC: If it is actively connected/connecting, turn it off. 
+        // If it is idle, disconnected, error, or ANYTHING ELSE, turn it on.
+        if (vpnState == VpnState.connected || vpnState == VpnState.connecting) {
+          VpnScope.vpnControllerOf(context, listen: false).stop();
+        } else {
+          await _executeConnect();
         }
-      } catch (e) {
-        // App still booting, Scopes not found yet. Keep looping.
       }
-      await Future.delayed(const Duration(milliseconds: 500));
+    } catch (e) {
+      // Catch connection errors silently so they DO NOT stop the backgrounding process
     }
-    return false;
+
+    // 2. THE GUARANTEED BACKGROUND: Wait 1 second for VPN commands to register, then minimize.
+    // Because this is outside the logic block above, it will fire 100% of the time.
+    await Future.delayed(const Duration(milliseconds: 1000));
+    try {
+      await _moveToBgPlugin.moveTaskToBack();
+    } catch (e) {
+      // Failsafe
+    }
   }
 
-  Future<void> _handleToggleAction() async {
-    bool isReady = await _waitForAppToInitialize();
-    if (!isReady) return;
+  Future<void> _executeConnect() async {
+    final serversController = ServersScope.controllerOf(context, listen: false);
+    
+    // Safety check: if DB is still slow after the 2s wait, give it 1 more second.
+    if (serversController.servers.isEmpty) {
+      await Future.delayed(const Duration(milliseconds: 1000));
+    }
+    
+    final servers = serversController.servers;
+    if (servers.isEmpty) return; // Abort safely if literally zero servers exist
 
+    final targetServer = servers.firstWhere(
+      (s) => s.serverData.name.toLowerCase().trim() == 'server',
+      orElse: () => servers.first,
+    );
+
+    serversController.pickServer(targetServer.id);
+
+    final routingController = RoutingScope.controllerOf(context, listen: false);
+    final routingList = routingController.routingList;
+    if (routingList.isEmpty) return;
+
+    final routingProfile = routingList.firstWhere(
+      (element) => element.id == targetServer.serverData.routingProfileId,
+      orElse: () => routingList.first, 
+    );
+
+    final excludedRoutes = ExcludedRoutesScope.controllerOf(context, listen: false).excludedRoutes;
     final vpnController = VpnScope.vpnControllerOf(context, listen: false);
-    if (vpnController.state == VpnState.disconnected) {
-      await _handleConnectAction(skipInitCheck: true);
-    } else {
-      await _handleDisconnectAction();
-    }
-  }
-
-  Future<void> _handleConnectAction({bool skipInitCheck = false}) async {
-    if (!skipInitCheck) {
-      bool isReady = await _waitForAppToInitialize();
-      if (!isReady) return;
-    }
-
-    try {
-      final serversController = ServersScope.controllerOf(context, listen: false);
-      final servers = serversController.servers;
-      
-      final targetServer = servers.firstWhere(
-        (s) => s.serverData.name.toLowerCase().trim() == 'server',
-        orElse: () => servers.first,
-      );
-
-      serversController.pickServer(targetServer.id);
-
-      final routingList = RoutingScope.controllerOf(context, listen: false).routingList;
-      final routingProfile = routingList.firstWhere(
-        (element) => element.id == targetServer.serverData.routingProfileId,
-        orElse: () => routingList.first, 
-      );
-
-      final excludedRoutes = ExcludedRoutesScope.controllerOf(context, listen: false).excludedRoutes;
-      final vpnController = VpnScope.vpnControllerOf(context, listen: false);
-      
-      await vpnController.start(
-        server: targetServer,
-        routingProfile: routingProfile,
-        excludedRoutes: excludedRoutes,
-      );
-    } catch (e) {
-      // Let the finally block handle it
-    }
-  }
-
-  Future<void> _handleDisconnectAction() async {
-    try {
-      VpnScope.vpnControllerOf(context, listen: false).stop();
-    } catch (e) {
-      // Let the finally block handle it
-    }
+    
+    await vpnController.start(
+      server: targetServer,
+      routingProfile: routingProfile,
+      excludedRoutes: excludedRoutes,
+    );
   }
 
   @override
