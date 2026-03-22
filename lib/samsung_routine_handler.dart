@@ -11,7 +11,7 @@ class SamsungRoutineHandler {
   }) {
     _quickActions.initialize((String shortcutType) async {
       if (shortcutType == 'connect_work_server') {
-        
+        await Future.delayed(const Duration(seconds: 1));
         // 1. Fetch all servers
         final servers = await serverRepository.getAllServers(); 
         
