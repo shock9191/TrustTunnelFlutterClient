@@ -35,6 +35,7 @@ dependencies:
   flutter:
     sdk: flutter
   quick_actions: ^1.0.6
+  move_to_bg: ^1.0.1 
   flutter_localizations:
     sdk: flutter
   flutter_native_splash: 2.4.7

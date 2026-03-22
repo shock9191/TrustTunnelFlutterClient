@@ -1,6 +1,7 @@
 import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:quick_actions/quick_actions.dart';
+import 'package:move_to_bg/move_to_bg.dart';
 import 'package:trusttunnel/feature/server/servers/widget/scope/servers_scope.dart';
 import 'package:trusttunnel/feature/vpn/widgets/vpn_scope.dart';
 
@@ -61,23 +62,29 @@ class _SamsungRoutineListenerWidgetState extends State<SamsungRoutineListenerWid
     // 1. Get the official UI state controller
     final serversController = ServersScope.controllerOf(context, listen: false);
     
-    // 2. Find the target server
-    final servers = serversController.state.servers;
+    // 2. Fetch the servers directly from the scope controller
+    final servers = serversController.servers;
     if (servers.isEmpty) return;
     
+    // 3. Find the target server
     final targetServer = servers.firstWhere(
       (s) => s.serverData.name.toLowerCase().trim() == 'server',
       orElse: () => servers.first,
     );
 
-    // 3. Emulate a physical tap on the "TURN ON" UI button
-    // This perfectly triggers the VpnUpdateManager!
-    serversController.selectServer(targetServer.id);
+    // 4. Emulate a physical tap using the correct method name
+    serversController.pickServer(targetServer.id);
+
+    // 5. Immediately push the app back to the background
+    MoveToBg.moveTaskToBack();
   }
 
   void _handleDisconnectAction() {
-    // Calling stop() on the main VpnScope exactly like the UI does
+    // 1. Calling stop() on the main VpnScope exactly like the UI does
     VpnScope.vpnControllerOf(context, listen: false).stop();
+
+    // 2. Immediately push the app back to the background
+    MoveToBg.moveTaskToBack();
   }
 
   @override
