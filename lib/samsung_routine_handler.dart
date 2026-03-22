@@ -3,199 +3,174 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:quick_actions/quick_actions.dart';
 
-
 import 'package:trusttunnel/data/model/vpn_state.dart';
 import 'package:trusttunnel/feature/server/servers/widget/scope/servers_scope.dart';
 import 'package:trusttunnel/feature/vpn/widgets/vpn_scope.dart';
 import 'package:trusttunnel/feature/routing/routing/widgets/scope/routing_scope.dart';
 import 'package:trusttunnel/feature/settings/excluded_routes/widgets/scope/excluded_routes_scope.dart';
 
-
 class SamsungRoutineHandler {
-  static final QuickActions _quickActions = const QuickActions();
-  static final StreamController<String> _actionStream = StreamController<String>.broadcast();
-  static Stream<String> get actionStream => _actionStream.stream;
+  static final QuickActions _quickActions = const QuickActions();
+  static final StreamController<String> _actionStream =
+      StreamController<String>.broadcast();
+  static Stream<String> get actionStream => _actionStream.stream;
 
+  static void init() {
+    _quickActions.initialize((String shortcutType) {
+      // Instantly capture the intent so Android doesn't drop it.
+      _actionStream.add(shortcutType);
+    });
 
-  static void init() {
-    _quickActions.initialize((String shortcutType) {
-      // Instantly capture the intent so Android doesn't drop it.
-      _actionStream.add(shortcutType);
-    });
-
-
-    _quickActions.setShortcutItems(<ShortcutItem>[
-      const ShortcutItem(type: 'connect_work_server', localizedTitle: 'Connect', icon: 'ic_launcher'),
-      const ShortcutItem(type: 'disconnect_vpn', localizedTitle: 'Disconnect', icon: 'ic_launcher'),
-      const ShortcutItem(type: 'toggle_vpn', localizedTitle: 'Toggle VPN', icon: 'ic_launcher'),
-    ]);
-  }
+    _quickActions.setShortcutItems(<ShortcutItem>[
+      const ShortcutItem(
+          type: 'connect_work_server',
+          localizedTitle: 'Connect',
+          icon: 'ic_launcher'),
+      const ShortcutItem(
+          type: 'disconnect_vpn',
+          localizedTitle: 'Disconnect',
+          icon: 'ic_launcher'),
+      const ShortcutItem(
+          type: 'toggle_vpn',
+          localizedTitle: 'Toggle VPN',
+          icon: 'ic_launcher'),
+    ]);
+  }
 }
-
 
 class SamsungRoutineListenerWidget extends StatefulWidget {
-  final Widget child;
-  const SamsungRoutineListenerWidget({Key? key, required this.child}) : super(key: key);
+  final Widget child;
+  const SamsungRoutineListenerWidget({Key? key, required this.child})
+      : super(key: key);
 
-
-  @override
-  State<SamsungRoutineListenerWidget> createState() => _SamsungRoutineListenerWidgetState();
+  @override
+  State<SamsungRoutineListenerWidget> createState() =>
+      _SamsungRoutineListenerWidgetState();
 }
 
+class _SamsungRoutineListenerWidgetState
+    extends State<SamsungRoutineListenerWidget> {
+  StreamSubscription? _routineSubscription;
+  String? _pendingAction; // Stores the action if the app is still booting
+  bool _isProcessing = false;
 
-class _SamsungRoutineListenerWidgetState extends State<SamsungRoutineListenerWidget> {
-  StreamSubscription? _routineSubscription;
-  String? _pendingAction; // Stores the action if the app is still booting
-  bool _isProcessing = false;
+  @override
+  void initState() {
+    super.initState();
+    _routineSubscription =
+        SamsungRoutineHandler.actionStream.listen((action) {
+      _pendingAction = action;
+      // We don't execute immediately. We tell Flutter to execute ONLY after the UI is built.
+      if (!_isProcessing) {
+        _safeExecute();
+      }
+    });
+  }
 
+  void _safeExecute() {
+    // This tells Flutter: "Wait until the context is fully mounted and drawn, then run this."
+    WidgetsBinding.instance.addPostFrameCallback((_) async {
+      if (_pendingAction == null || !mounted || _isProcessing) return;
 
-  @override
-  void initState() {
-    super.initState();
-    _routineSubscription = SamsungRoutineHandler.actionStream.listen((action) {
-      _pendingAction = action;
-      // We don't execute immediately. We tell Flutter to execute ONLY after the UI is built.
-      if (!_isProcessing) {
-        _safeExecute();
-      }
-    });
-  }
+      _isProcessing = true;
+      final action = _pendingAction;
+      _pendingAction = null; // Clear the queue
 
+      try {
+        if (action == 'disconnect_vpn') {
+          VpnScope.vpnControllerOf(context, listen: false).stop();
+        } else if (action == 'connect_work_server') {
+          await _executeConnect();
+        } else if (action == 'toggle_vpn') {
+          final vpnState =
+              VpnScope.vpnControllerOf(context, listen: false).state;
+          if (vpnState == VpnState.connected ||
+              vpnState == VpnState.connecting) {
+            VpnScope.vpnControllerOf(context, listen: false).stop();
+          } else {
+            await _executeConnect();
+          }
+        }
+      } catch (e) {
+        // Safe catch
+      }
 
-  void _safeExecute() {
-    // This tells Flutter: "Wait until the context is fully mounted and drawn, then run this."
-    WidgetsBinding.instance.addPostFrameCallback((_) async {
-      if (_pendingAction == null || !mounted || _isProcessing) return;
-      
-      _isProcessing = true;
-      final action = _pendingAction;
-      _pendingAction = null; // Clear the queue
+      // Force backgrounding after execution
+      _forceBackground();
+      _isProcessing = false;
+    });
+  }
 
+  Future<void> _executeConnect() async {
+    final serversController = ServersScope.controllerOf(
+      context,
+      listen: false,
+    );
 
-      try {
-        if (action == 'disconnect_vpn') {
-          VpnScope.vpnControllerOf(context, listen: false).stop();
-        } 
-        else if (action == 'connect_work_server') {
-          await _executeConnect();
-        } 
-        else if (action == 'toggle_vpn') {
-          final vpnState = VpnScope.vpnControllerOf(context, listen: false).state;
-          if (vpnState == VpnState.connected || vpnState == VpnState.connecting) {
-            VpnScope.vpnControllerOf(context, listen: false).stop();
-          } else {
-            await _executeConnect();
-          }
-        }
-      } catch (e) {
-        // Safe catch
-      }
+    // Give the database a moment to load if it is a fresh cold start
+    for (int i = 0; i < 4; i++) {
+      if (serversController.servers.isNotEmpty) break;
+      await Future.delayed(const Duration(milliseconds: 500));
+    }
 
+    final servers = serversController.servers;
+    if (servers.isEmpty) return;
 
-      // Force backgrounding after execution
-      _forceBackground();
-      _isProcessing = false;
-    });
-  }
+    final targetServer = servers.firstWhere(
+      (s) => s.serverData.name.toLowerCase().trim() == 'server',
+      orElse: () => servers.first,
+    );
 
+    serversController.pickServer(targetServer.id);
 
-  Future<void> _executeConnect() async {
-    try {
-      final serversController = ServersScope.controllerOf(context, listen: false);
-      
-      // Increased wait time and added null safety for controller
-      final Duration timeout = const Duration(seconds: 8);
-      final Stopwatch stopwatch = Stopwatch()..start();
-      
-      while (stopwatch.elapsed < timeout) {
-        if (serversController.servers.isNotEmpty) break;
-        await Future.delayed(const Duration(milliseconds: 300));
-      }
-      
-      if (!mounted) return;
-      
-      final servers = serversController.servers;
-      if (servers.isEmpty) {
-        // Fallback: Try to get servers from alternative source if available
-        final altServers = ServersScope.maybeOf(context)?.servers;
-        if (altServers != null && altServers.isNotEmpty) {
-          serversController.pickServer(altServers.first.id);
-        } else {
-          return; // No servers available
-        }
-      }
+    final routingController =
+        RoutingScope.controllerOf(context, listen: false);
+    final routingList = routingController.routingList;
+    if (routingList.isEmpty) return;
 
+    final routingProfile = routingList.firstWhere(
+      (element) => element.id == targetServer.serverData.routingProfileId,
+      orElse: () => routingList.first,
+    );
 
-      final targetServer = servers.firstWhere(
-        (s) => s.serverData.name.toLowerCase().trim() == 'server',
-        orElse: () => servers.first,
-      );
+    final excludedRoutes =
+        ExcludedRoutesScope.controllerOf(context, listen: false)
+            .excludedRoutes;
+    final vpnController =
+        VpnScope.vpnControllerOf(context, listen: false);
 
+    await vpnController.start(
+      server: targetServer,
+      routingProfile: routingProfile,
+      excludedRoutes: excludedRoutes,
+    );
+  }
 
-      serversController.pickServer(targetServer.id);
+  void _forceBackground() async {
+    await Future.delayed(const Duration(milliseconds: 500));
+    // Since MoveToBg keeps failing randomly due to Android 12 restrictions,
+    // we use the native Android intent to go home. It is 100% reliable.
+    try {
+      const platform = MethodChannel('app_channel');
+      await platform.invokeMethod('goHome');
+    } catch (e) {
+      // If method channel isn't set up, fallback to standard system pop
+      SystemNavigator.pop();
+    }
+  }
 
+  @override
+  void dispose() {
+    _routineSubscription?.cancel();
+    super.dispose();
+  }
 
-      final routingController = RoutingScope.controllerOf(context, listen: false);
-      final routingList = routingController.routingList;
-      if (routingList.isEmpty) return;
-
-
-      final routingProfile = routingList.firstWhere(
-        (element) => element.id == targetServer.serverData.routingProfileId,
-        orElse: () => routingList.first, 
-      );
-
-
-      final excludedRoutes = ExcludedRoutesScope.controllerOf(context, listen: false).excludedRoutes;
-      final vpnController = VpnScope.vpnControllerOf(context, listen: false);
-      
-      await vpnController.start(
-        server: targetServer,
-        routingProfile: routingProfile,
-        excludedRoutes: excludedRoutes,
-      );
-    } catch (e, stack) {
-      // Log error for debugging (remove in production if needed)
-      debugPrint('Connect error: $e\n$stack');
-    }
-  }
-
-
-  void _forceBackground() async {
-    await Future.delayed(const Duration(milliseconds: 500));
-    // Since MoveToBg keeps failing randomly due to Android 12 restrictions, 
-    // we use the native Android intent to go home. It is 100% reliable.
-    try {
-      const platform = MethodChannel('app_channel');
-      await platform.invokeMethod('goHome');
-    } on PlatformException catch (e) {
-      // If method channel fails, try alternative Android intent
-      try {
-        final Intent = await platform.invokeMethod('sendHomeIntent');
-        if (Intent == true) return;
-      } on PlatformException catch (_) {
-        // Final fallback to system navigator
-        SystemNavigator.pop();
-      }
-    } catch (e) {
-      SystemNavigator.pop();
-    }
-  }
-
-
-  @override
-  void dispose() {
-    _routineSubscription?.cancel();
-    super.dispose();
-  }
-
-
-  @override
-  Widget build(BuildContext context) {
-    // If a pending action arrives while building, process it right after build completes
-    if (_pendingAction != null && !_isProcessing) {
-      _safeExecute();
-    }
-    return widget.child;
-  }
+  @override
+  Widget build(BuildContext context) {
+    // If a pending action arrives while building, process it right after build completes
+    if (_pendingAction != null && !_isProcessing) {
+      _safeExecute();
+    }
+    return widget.child;
+  }
 }
