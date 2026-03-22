@@ -2,7 +2,6 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:quick_actions/quick_actions.dart';
-import 'package:move_to_bg/move_to_bg.dart';
 
 import 'package:trusttunnel/data/model/vpn_state.dart';
 import 'package:trusttunnel/feature/server/servers/widget/scope/servers_scope.dart';
@@ -17,7 +16,7 @@ class SamsungRoutineHandler {
 
   static void init() {
     _quickActions.initialize((String shortcutType) {
-      // Send the action to the stream instantly, no delays blocking the intent.
+      // Instantly capture the intent so Android doesn't drop it.
       _actionStream.add(shortcutType);
     });
 
@@ -39,54 +38,64 @@ class SamsungRoutineListenerWidget extends StatefulWidget {
 
 class _SamsungRoutineListenerWidgetState extends State<SamsungRoutineListenerWidget> {
   StreamSubscription? _routineSubscription;
+  String? _pendingAction; // Stores the action if the app is still booting
+  bool _isProcessing = false;
 
   @override
   void initState() {
     super.initState();
     _routineSubscription = SamsungRoutineHandler.actionStream.listen((action) {
-      // Fire and forget so we don't block the UI thread
-      _processAction(action);
+      _pendingAction = action;
+      // We don't execute immediately. We tell Flutter to execute ONLY after the UI is built.
+      if (!_isProcessing) {
+        _safeExecute();
+      }
     });
   }
 
-  Future<void> _processAction(String action) async {
-    // 1. Give the Scopes time to build natively without blocking the listener
-    await Future.delayed(const Duration(milliseconds: 1500));
+  void _safeExecute() {
+    // This tells Flutter: "Wait until the context is fully mounted and drawn, then run this."
+    WidgetsBinding.instance.addPostFrameCallback((_) async {
+      if (_pendingAction == null || !mounted || _isProcessing) return;
+      
+      _isProcessing = true;
+      final action = _pendingAction;
+      _pendingAction = null; // Clear the queue
 
-    if (!mounted) return;
-
-    try {
-      if (action == 'disconnect_vpn') {
-        VpnScope.vpnControllerOf(context, listen: false).stop();
-      } else if (action == 'connect_work_server') {
-        await _executeConnect();
-      } else if (action == 'toggle_vpn') {
-        final vpnState = VpnScope.vpnControllerOf(context, listen: false).state;
-        
-        // If it is anything other than actively connected/connecting, force it ON.
-        if (vpnState == VpnState.connected || vpnState == VpnState.connecting) {
+      try {
+        if (action == 'disconnect_vpn') {
           VpnScope.vpnControllerOf(context, listen: false).stop();
-        } else {
+        } 
+        else if (action == 'connect_work_server') {
           await _executeConnect();
+        } 
+        else if (action == 'toggle_vpn') {
+          final vpnState = VpnScope.vpnControllerOf(context, listen: false).state;
+          if (vpnState == VpnState.connected || vpnState == VpnState.connecting) {
+            VpnScope.vpnControllerOf(context, listen: false).stop();
+          } else {
+            await _executeConnect();
+          }
         }
+      } catch (e) {
+        // Safe catch
       }
-    } catch (e) {
-      // Ignore connection errors
-    }
 
-    // 2. Force the app out of the foreground
-    _forceBackground();
+      // Force backgrounding after execution
+      _forceBackground();
+      _isProcessing = false;
+    });
   }
 
   Future<void> _executeConnect() async {
     final serversController = ServersScope.controllerOf(context, listen: false);
     
-    // Safety loop: wait up to 2 seconds for DB if it's slow
-    for (int i = 0; i < 4; i++) {
-      if (serversController.servers.isNotEmpty) break;
+    // Give the database a moment to load if it is a fresh cold start
+    for(int i=0; i<4; i++) {
+      if(serversController.servers.isNotEmpty) break;
       await Future.delayed(const Duration(milliseconds: 500));
     }
-    
+
     final servers = serversController.servers;
     if (servers.isEmpty) return;
 
@@ -117,19 +126,15 @@ class _SamsungRoutineListenerWidgetState extends State<SamsungRoutineListenerWid
   }
 
   void _forceBackground() async {
-    // Wait slightly to let the VPN command reach the engine
-    await Future.delayed(const Duration(milliseconds: 800));
-    
+    await Future.delayed(const Duration(milliseconds: 500));
+    // Since MoveToBg keeps failing randomly due to Android 12 restrictions, 
+    // we use the native Android intent to go home. It is 100% reliable.
     try {
-      final moveToBg = MoveToBg();
-      await moveToBg.moveTaskToBack();
+      const platform = MethodChannel('app_channel');
+      await platform.invokeMethod('goHome');
     } catch (e) {
-      try {
-        // Fallback: If moveTaskToBack fails, pop the app context natively
-        SystemNavigator.pop();
-      } catch (e2) {
-        // Ignore
-      }
+      // If method channel isn't set up, fallback to standard system pop
+      SystemNavigator.pop();
     }
   }
 
@@ -141,6 +146,10 @@ class _SamsungRoutineListenerWidgetState extends State<SamsungRoutineListenerWid
 
   @override
   Widget build(BuildContext context) {
+    // If a pending action arrives while building, process it right after build completes
+    if (_pendingAction != null && !_isProcessing) {
+      _safeExecute();
+    }
     return widget.child;
   }
 }
