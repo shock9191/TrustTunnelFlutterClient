@@ -17,7 +17,7 @@ class SamsungRoutineHandler {
   static final StreamController<String> _actionStream =
       StreamController<String>.broadcast();
 
-  // Exposed so bootstrap inside this file can push initial shortcut types.
+  // Exposed so bootstrap can push initial shortcut types.
   static StreamController<String> get actionStreamController =>
       _actionStream;
 
@@ -83,7 +83,7 @@ class SamsungRoutineListenerWidget extends StatefulWidget {
 
 class _SamsungRoutineListenerWidgetState
     extends State<SamsungRoutineListenerWidget> {
-  StreamSubscription? _routineSubscription;
+  StreamSubscription<String>? _routineSubscription;
   String? _pendingAction; // Stores the action if the app is still booting
   bool _isProcessing = false;
 
@@ -124,7 +124,7 @@ class _SamsungRoutineListenerWidgetState
             await _executeConnect();
           }
         }
-      } catch (e) {
+      } catch (_) {
         // Safe catch
       }
 
@@ -160,3 +160,48 @@ class _SamsungRoutineListenerWidgetState
     if (routingList.isEmpty) return;
 
     final routingProfile = routingList.firstWhere(
+      (element) => element.id == targetServer.serverData.routingProfileId,
+      orElse: () => routingList.first,
+    );
+
+    final excludedRoutes =
+        ExcludedRoutesScope.controllerOf(context, listen: false)
+            .excludedRoutes;
+    final vpnController =
+        VpnScope.vpnControllerOf(context, listen: false);
+
+    await vpnController.start(
+      server: targetServer,
+      routingProfile: routingProfile,
+      excludedRoutes: excludedRoutes,
+    );
+  }
+
+  void _forceBackground() async {
+    await Future.delayed(const Duration(milliseconds: 500));
+    // Since MoveToBg keeps failing randomly due to Android 12+ restrictions,
+    // we use the native Android intent to go home.
+    try {
+      const platform = MethodChannel('app_channel');
+      await platform.invokeMethod('goHome');
+    } catch (_) {
+      // If method channel isn't set up, fallback to standard system pop.
+      SystemNavigator.pop();
+    }
+  }
+
+  @override
+  void dispose() {
+    _routineSubscription?.cancel();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    // If a pending action arrives while building, process it right after build completes.
+    if (_pendingAction != null && !_isProcessing) {
+      _safeExecute();
+    }
+    return widget.child;
+  }
+}
