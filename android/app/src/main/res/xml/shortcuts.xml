@@ -1,5 +1,6 @@
 <?xml version="1.0" encoding="utf-8"?>
 <shortcuts xmlns:android="http://schemas.android.com/apk/res/android">
+    
     <shortcut
         android:shortcutId="connect_work_server"
         android:enabled="true"
@@ -9,7 +10,10 @@
         <intent
             android:action="android.intent.action.VIEW"
             android:targetPackage="com.adguard.trusttunnel"
-            android:targetClass="com.adguard.trusttunnel.MainActivity" />
+            android:targetClass="com.adguard.trusttunnel.MainActivity">
+            <!-- This line is REQUIRED for Flutter to know what to do -->
+            <extra android:name="type" android:value="connect_work_server" />
+        </intent>
     </shortcut>
 
     <shortcut
@@ -21,7 +25,9 @@
         <intent
             android:action="android.intent.action.VIEW"
             android:targetPackage="com.adguard.trusttunnel"
-            android:targetClass="com.adguard.trusttunnel.MainActivity" />
+            android:targetClass="com.adguard.trusttunnel.MainActivity">
+            <extra android:name="type" android:value="disconnect_vpn" />
+        </intent>
     </shortcut>
 
     <shortcut
@@ -33,6 +39,9 @@
         <intent
             android:action="android.intent.action.VIEW"
             android:targetPackage="com.adguard.trusttunnel"
-            android:targetClass="com.adguard.trusttunnel.MainActivity" />
+            android:targetClass="com.adguard.trusttunnel.MainActivity">
+            <extra android:name="type" android:value="toggle_vpn" />
+        </intent>
     </shortcut>
+
 </shortcuts>
