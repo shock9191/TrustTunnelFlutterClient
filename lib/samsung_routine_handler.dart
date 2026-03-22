@@ -54,70 +54,84 @@ class _SamsungRoutineListenerWidgetState extends State<SamsungRoutineListenerWid
     });
   }
 
-  void _handleToggleAction() {
-    final vpnController = VpnScope.vpnControllerOf(context, listen: false);
-    if (vpnController.state == VpnState.disconnected) {
-      _handleConnectAction();
-    } else {
-      _handleDisconnectAction();
+  void _handleToggleAction() async {
+    // Retry loop to ensure VPN controller is ready on cold start
+    for (int i = 0; i < 6; i++) {
+      try {
+        if (!mounted) return;
+        final vpnController = VpnScope.vpnControllerOf(context, listen: false);
+        
+        if (vpnController.state == VpnState.disconnected) {
+          _handleConnectAction();
+        } else {
+          _handleDisconnectAction();
+        }
+        return; // Success, exit loop
+      } catch (e) {
+        await Future.delayed(const Duration(milliseconds: 500));
+      }
     }
   }
 
   void _handleConnectAction() async {
-    try {
-      final serversController = ServersScope.controllerOf(context, listen: false);
-      final routingController = RoutingScope.controllerOf(context, listen: false);
-      
-      // FIX: Wait for BOTH servers and routing profiles to load from the database
-      int retries = 0;
-      while ((serversController.servers.isEmpty || routingController.routingList.isEmpty) && retries < 10) {
+    // Try to connect up to 6 times (giving the app 3 seconds to fully boot)
+    for (int i = 0; i < 6; i++) {
+      try {
+        if (!mounted) return;
+
+        final serversController = ServersScope.controllerOf(context, listen: false);
+        final servers = serversController.servers;
+        
+        // If servers aren't loaded yet, throw an error to trigger the catch block and retry
+        if (servers.isEmpty) throw Exception("Servers not ready");
+
+        final targetServer = servers.firstWhere(
+          (s) => s.serverData.name.toLowerCase().trim() == 'server',
+          orElse: () => servers.first,
+        );
+
+        serversController.pickServer(targetServer.id);
+
+        final routingController = RoutingScope.controllerOf(context, listen: false);
+        final routingList = routingController.routingList;
+        
+        if (routingList.isEmpty) throw Exception("Routing not ready");
+
+        final routingProfile = routingList.firstWhere(
+          (element) => element.id == targetServer.serverData.routingProfileId,
+          orElse: () => routingList.first, 
+        );
+
+        final excludedRoutes = ExcludedRoutesScope.controllerOf(context, listen: false).excludedRoutes;
+        final vpnController = VpnScope.vpnControllerOf(context, listen: false);
+        
+        await vpnController.start(
+          server: targetServer,
+          routingProfile: routingProfile,
+          excludedRoutes: excludedRoutes,
+        );
+
+        // Success! Move to background and exit the retry loop.
+        await _moveToBgPlugin.moveTaskToBack();
+        return; 
+
+      } catch (e) {
+        // App is still booting (Scopes not found or lists empty). Wait 500ms and try again.
         await Future.delayed(const Duration(milliseconds: 500));
-        retries++;
       }
-
-      // If context was lost during the wait, abort safely
-      if (!mounted) return;
-
-      final servers = serversController.servers;
-      final routingList = routingController.routingList;
-
-      // If either list is STILL empty after waiting, abort to prevent a crash
-      if (servers.isEmpty || routingList.isEmpty) return;
-      
-      final targetServer = servers.firstWhere(
-        (s) => s.serverData.name.toLowerCase().trim() == 'server',
-        orElse: () => servers.first,
-      );
-
-      serversController.pickServer(targetServer.id);
-
-      final routingProfile = routingList.firstWhere(
-        (element) => element.id == targetServer.serverData.routingProfileId,
-        orElse: () => routingList.first, 
-      );
-
-      final excludedRoutes = ExcludedRoutesScope.controllerOf(context, listen: false).excludedRoutes;
-      final vpnController = VpnScope.vpnControllerOf(context, listen: false);
-      
-      await vpnController.start(
-        server: targetServer,
-        routingProfile: routingProfile,
-        excludedRoutes: excludedRoutes,
-      );
-
-      await _moveToBgPlugin.moveTaskToBack();
-
-    } catch (e) {
-      // Ignore errors silently to prevent app crashes in the background
     }
   }
 
   void _handleDisconnectAction() async {
-    try {
-      VpnScope.vpnControllerOf(context, listen: false).stop();
-      await _moveToBgPlugin.moveTaskToBack();
-    } catch (e) {
-      // Ignore errors silently
+    for (int i = 0; i < 6; i++) {
+      try {
+        if (!mounted) return;
+        VpnScope.vpnControllerOf(context, listen: false).stop();
+        await _moveToBgPlugin.moveTaskToBack();
+        return; // Success, exit loop
+      } catch (e) {
+        await Future.delayed(const Duration(milliseconds: 500));
+      }
     }
   }
 
