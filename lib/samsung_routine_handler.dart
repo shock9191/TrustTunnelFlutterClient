@@ -2,11 +2,13 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:quick_actions/quick_actions.dart';
 import 'package:move_to_bg/move_to_bg.dart';
-import 'package:trusttunnel/data/model/vpn_state.dart'; // ADDED THIS IMPORT
+
+import 'package:trusttunnel/data/model/vpn_state.dart';
 import 'package:trusttunnel/feature/server/servers/widget/scope/servers_scope.dart';
 import 'package:trusttunnel/feature/vpn/widgets/vpn_scope.dart';
 import 'package:trusttunnel/feature/routing/routing/widgets/scope/routing_scope.dart';
 import 'package:trusttunnel/feature/settings/excluded_routes/widgets/scope/excluded_routes_scope.dart';
+import 'package:trusttunnel/feature/settings/app_settings/widgets/scope/app_settings_scope.dart';
 
 class SamsungRoutineHandler {
   static final QuickActions _quickActions = const QuickActions();
@@ -20,28 +22,15 @@ class SamsungRoutineHandler {
     });
 
     _quickActions.setShortcutItems(<ShortcutItem>[
-      const ShortcutItem(
-        type: 'connect_work_server',
-        localizedTitle: 'Connect to Work Server',
-        icon: 'ic_launcher',
-      ),
-      const ShortcutItem(
-        type: 'disconnect_vpn',
-        localizedTitle: 'Disconnect VPN',
-        icon: 'ic_launcher',
-      ),
-      const ShortcutItem(
-        type: 'toggle_vpn', // ADDED TOGGLE SHORTCUT
-        localizedTitle: 'Toggle VPN',
-        icon: 'ic_launcher',
-      ),
+      const ShortcutItem(type: 'connect_work_server', localizedTitle: 'Connect', icon: 'ic_launcher'),
+      const ShortcutItem(type: 'disconnect_vpn', localizedTitle: 'Disconnect', icon: 'ic_launcher'),
+      const ShortcutItem(type: 'toggle_vpn', localizedTitle: 'Toggle VPN', icon: 'ic_launcher'),
     ]);
   }
 }
 
 class SamsungRoutineListenerWidget extends StatefulWidget {
   final Widget child;
-
   const SamsungRoutineListenerWidget({Key? key, required this.child}) : super(key: key);
 
   @override
@@ -61,15 +50,13 @@ class _SamsungRoutineListenerWidgetState extends State<SamsungRoutineListenerWid
       } else if (action == 'disconnect_vpn') {
         _handleDisconnectAction();
       } else if (action == 'toggle_vpn') {
-        _handleToggleAction(); // ADDED TOGGLE HANDLER
+        _handleToggleAction();
       }
     });
   }
 
-  // NEW METHOD: Checks state and routes to connect or disconnect
   void _handleToggleAction() {
     final vpnController = VpnScope.vpnControllerOf(context, listen: false);
-    
     if (vpnController.state == VpnState.disconnected) {
       _handleConnectAction();
     } else {
@@ -80,8 +67,23 @@ class _SamsungRoutineListenerWidgetState extends State<SamsungRoutineListenerWid
   void _handleConnectAction() async {
     try {
       final serversController = ServersScope.controllerOf(context, listen: false);
+      
+      // FIX: Wait up to 5 seconds for servers to load if the app is starting cold
+      int retries = 0;
+      while (serversController.servers.isEmpty && retries < 10) {
+        await Future.delayed(const Duration(milliseconds: 500));
+        retries++;
+      }
+
       final servers = serversController.servers;
-      if (servers.isEmpty) return;
+      if (servers.isEmpty) {
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(content: Text('Error: Server list empty. Launch app normally first.')),
+          );
+        }
+        return; // Stop here, leave app open so user sees the error
+      }
       
       final targetServer = servers.firstWhere(
         (s) => s.serverData.name.toLowerCase().trim() == 'server',
@@ -97,24 +99,40 @@ class _SamsungRoutineListenerWidgetState extends State<SamsungRoutineListenerWid
       );
 
       final excludedRoutes = ExcludedRoutesScope.controllerOf(context, listen: false).excludedRoutes;
+      final appSettings = AppSettingsScope.settingsOf(context, listen: false);
 
       final vpnController = VpnScope.vpnControllerOf(context, listen: false);
+      
       await vpnController.start(
         server: targetServer,
         routingProfile: routingProfile,
         excludedRoutes: excludedRoutes,
+        appSettings: appSettings, 
       );
 
-    } catch (e) {
-      // Ignore errors silently to prevent crashes
-    } finally {
+      // Success! Move to background.
       await _moveToBgPlugin.moveTaskToBack();
+
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Connection failed: $e')),
+        );
+      }
     }
   }
 
   void _handleDisconnectAction() async {
-    VpnScope.vpnControllerOf(context, listen: false).stop();
-    await _moveToBgPlugin.moveTaskToBack();
+    try {
+      VpnScope.vpnControllerOf(context, listen: false).stop();
+      await _moveToBgPlugin.moveTaskToBack();
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Disconnect failed: $e')),
+        );
+      }
+    }
   }
 
   @override
