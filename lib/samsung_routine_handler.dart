@@ -67,7 +67,7 @@ class _SamsungRoutineListenerWidgetState extends State<SamsungRoutineListenerWid
     try {
       final serversController = ServersScope.controllerOf(context, listen: false);
       
-      // Cold-start wait loop
+      // Cold-start wait loop (Wait up to 5 seconds for servers to load)
       int retries = 0;
       while (serversController.servers.isEmpty && retries < 10) {
         await Future.delayed(const Duration(milliseconds: 500));
@@ -100,7 +100,6 @@ class _SamsungRoutineListenerWidgetState extends State<SamsungRoutineListenerWid
       final excludedRoutes = ExcludedRoutesScope.controllerOf(context, listen: false).excludedRoutes;
       final vpnController = VpnScope.vpnControllerOf(context, listen: false);
       
-      // Connect without the guessed appSettings
       await vpnController.start(
         server: targetServer,
         routingProfile: routingProfile,
