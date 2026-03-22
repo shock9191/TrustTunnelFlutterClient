@@ -8,7 +8,6 @@ import 'package:trusttunnel/feature/server/servers/widget/scope/servers_scope.da
 import 'package:trusttunnel/feature/vpn/widgets/vpn_scope.dart';
 import 'package:trusttunnel/feature/routing/routing/widgets/scope/routing_scope.dart';
 import 'package:trusttunnel/feature/settings/excluded_routes/widgets/scope/excluded_routes_scope.dart';
-import 'package:trusttunnel/feature/settings/app_settings/widgets/scope/app_settings_scope.dart';
 
 class SamsungRoutineHandler {
   static final QuickActions _quickActions = const QuickActions();
@@ -68,7 +67,7 @@ class _SamsungRoutineListenerWidgetState extends State<SamsungRoutineListenerWid
     try {
       final serversController = ServersScope.controllerOf(context, listen: false);
       
-      // FIX: Wait up to 5 seconds for servers to load if the app is starting cold
+      // Cold-start wait loop
       int retries = 0;
       while (serversController.servers.isEmpty && retries < 10) {
         await Future.delayed(const Duration(milliseconds: 500));
@@ -82,7 +81,7 @@ class _SamsungRoutineListenerWidgetState extends State<SamsungRoutineListenerWid
             const SnackBar(content: Text('Error: Server list empty. Launch app normally first.')),
           );
         }
-        return; // Stop here, leave app open so user sees the error
+        return;
       }
       
       final targetServer = servers.firstWhere(
@@ -99,18 +98,15 @@ class _SamsungRoutineListenerWidgetState extends State<SamsungRoutineListenerWid
       );
 
       final excludedRoutes = ExcludedRoutesScope.controllerOf(context, listen: false).excludedRoutes;
-      final appSettings = AppSettingsScope.settingsOf(context, listen: false);
-
       final vpnController = VpnScope.vpnControllerOf(context, listen: false);
       
+      // Connect without the guessed appSettings
       await vpnController.start(
         server: targetServer,
         routingProfile: routingProfile,
         excludedRoutes: excludedRoutes,
-        appSettings: appSettings, 
       );
 
-      // Success! Move to background.
       await _moveToBgPlugin.moveTaskToBack();
 
     } catch (e) {
