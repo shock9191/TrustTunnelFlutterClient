@@ -1,39 +1,52 @@
 import 'package:quick_actions/quick_actions.dart';
-import 'package:trusttunnel/data/datasources/server_datasource.dart';
 
 class SamsungRoutineHandler {
   static final QuickActions _quickActions = const QuickActions();
 
   static void init({
-    required ServerDataSource serverDataSource,
-    required dynamic vpnRepository, 
+    required dynamic serverRepository,
+    required dynamic vpnRepository,
+    required dynamic routingRepository,
+    required dynamic settingsRepository,
   }) {
     _quickActions.initialize((String shortcutType) async {
       if (shortcutType == 'connect_work_server') {
         
-        // 1. Fetch all servers from the database
-        final servers = await serverDataSource.getAllServers();
+        // 1. Fetch all servers
+        final servers = await serverRepository.getAllServers(); 
         
-        // 2. Find the server with the exact name "server"
+        // 2. Find the server named "server"
         final myWorkServer = servers.firstWhere(
           (s) => s.serverData.name == 'server',
-          // We cast null to dynamic to avoid type errors if it doesn't exist
           orElse: () => null as dynamic, 
         );
 
         if (myWorkServer != null) {
-          // 3. Mark it as the selected server in the app's database
-          await serverDataSource.setSelectedServerId(id: myWorkServer.id);
-          
-          // 4. Start the VPN using the repository!
-          // Note: Because I can't see VpnRepository, this assumes it has a simple `connect()` method. 
-          // If it throws an error in your IDE, change it to the exact method name (e.g., start(), toggle(), etc.)
-          await vpnRepository.connect();
+          // 3. Mark the server as selected in the UI
+          await serverRepository.setSelectedServerId(id: myWorkServer.id);
+
+          // 4. Fetch the routing profile associated with this server
+          final routingProfile = await routingRepository.getProfileById(
+            id: myWorkServer.serverData.routingProfileId,
+          );
+
+          // 5. Fetch the global excluded routes (e.g., bypass LAN)
+          final excludedRoutes = await settingsRepository.getExcludedRoutes();
+
+          // 6. Start the VPN! 
+          // (TrustTunnel calls this startListenToStates, which boots the VPN engine)
+          if (routingProfile != null) {
+             await vpnRepository.startListenToStates(
+               server: myWorkServer,
+               routingProfile: routingProfile,
+               excludedRoutes: excludedRoutes,
+             );
+          }
         }
       }
     });
 
-    // Register the shortcut with Android
+    // Register the shortcut with Android OS
     _quickActions.setShortcutItems(<ShortcutItem>[
       const ShortcutItem(
         type: 'connect_work_server',

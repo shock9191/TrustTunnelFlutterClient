@@ -21,13 +21,13 @@ void main() => runZonedGuarded(
     
     final initializationResult = await InitializationHelperIo().init();
 
-    // 3. INITIALIZE THE SAMSUNG ROUTINE HANDLER
-    // We pass the repositories directly from the initialization factory
+    // INITIALIZE THE SAMSUNG ROUTINE HANDLER
     SamsungRoutineHandler.init(
-      serverDataSource: initializationResult.repositoryFactory.serverDataSource,
+      serverRepository: initializationResult.repositoryFactory.serverRepository,
       vpnRepository: initializationResult.repositoryFactory.vpnRepository,
+      routingRepository: initializationResult.repositoryFactory.routingRepository,
+      settingsRepository: initializationResult.repositoryFactory.settingsRepository,
     );
-
     runApp(
       DependencyScope(
         dependenciesFactory: initializationResult.dependenciesFactory,
