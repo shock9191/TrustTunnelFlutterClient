@@ -1,5 +1,7 @@
 import 'dart:async';
 import 'dart:developer';
+// 1. IMPORT OUR HANDLER
+import 'samsung_routine_handler.dart'; 
 import 'package:flutter/material.dart' hide Router;
 import 'package:flutter/material.dart';
 import 'package:trusttunnel/di/model/initialization_helper.dart';
@@ -12,25 +14,19 @@ import 'package:trusttunnel/feature/settings/excluded_routes/widgets/scope/exclu
 import 'package:trusttunnel/feature/vpn/widgets/vpn_scope.dart';
 import 'package:trusttunnel/feature/vpn/widgets/vpn_update_manager.dart';
 
-// 1. ADD THIS IMPORT
-import 'samsung_routine_handler.dart';
-
 void main() => runZonedGuarded(
   () async {
-    // 2. ADD THIS LINE: Required when using plugins before runApp
+    // 2. REQUIRED FOR QUICK ACTIONS
     WidgetsFlutterBinding.ensureInitialized();
     
     final initializationResult = await InitializationHelperIo().init();
 
-    // 3. ADD THIS BLOCK: Initialize the Samsung Routine Handler
-    SamsungRoutineHandler.init(() {
-      // Access the VPN repository directly from the initializationResult
-      final vpnRepo = initializationResult.repositoryFactory.vpnRepository;
-      
-      // Connect to the specific server. You may need to adapt this slightly 
-      // depending on how TrustTunnel expects the server name/ID to be passed.
-      vpnRepo.connect(serverName: 'server'); 
-    });
+    // 3. INITIALIZE THE SAMSUNG ROUTINE HANDLER
+    // We pass the repositories directly from the initialization factory
+    SamsungRoutineHandler.init(
+      serverDataSource: initializationResult.repositoryFactory.serverDataSource,
+      vpnRepository: initializationResult.repositoryFactory.vpnRepository,
+    );
 
     runApp(
       DependencyScope(
