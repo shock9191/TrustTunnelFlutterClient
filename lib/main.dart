@@ -1,7 +1,6 @@
 import 'dart:async';
 import 'dart:developer';
-// 1. IMPORT OUR HANDLER
-import 'samsung_routine_handler.dart'; 
+import 'samsung_routine_handler.dart';
 import 'package:flutter/material.dart' hide Router;
 import 'package:flutter/material.dart';
 import 'package:trusttunnel/di/model/initialization_helper.dart';
@@ -14,20 +13,14 @@ import 'package:trusttunnel/feature/settings/excluded_routes/widgets/scope/exclu
 import 'package:trusttunnel/feature/vpn/widgets/vpn_scope.dart';
 import 'package:trusttunnel/feature/vpn/widgets/vpn_update_manager.dart';
 
+
 void main() => runZonedGuarded(
   () async {
-    // 2. REQUIRED FOR QUICK ACTIONS
     WidgetsFlutterBinding.ensureInitialized();
-    
     final initializationResult = await InitializationHelperIo().init();
 
-    // INITIALIZE THE SAMSUNG ROUTINE HANDLER
-    SamsungRoutineHandler.init(
-      serverRepository: initializationResult.repositoryFactory.serverRepository,
-      vpnRepository: initializationResult.repositoryFactory.vpnRepository,
-      routingRepository: initializationResult.repositoryFactory.routingRepository,
-      settingsRepository: initializationResult.repositoryFactory.settingsRepository,
-    );
+    SamsungRoutineHandler.init();
+
     runApp(
       DependencyScope(
         dependenciesFactory: initializationResult.dependenciesFactory,
@@ -40,7 +33,9 @@ void main() => runZonedGuarded(
                 initialState: initializationResult.initialVpnState,
                 child: const VpnUpdateManager(
                   child: DeepLinkScope(
-                    child: App(),
+                    child: SamsungRoutineListenerWidget(
+                      child: App(),
+                    ),
                   ),
                 ),
               ),
