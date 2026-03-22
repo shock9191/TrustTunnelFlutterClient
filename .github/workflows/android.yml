@@ -2,7 +2,7 @@ name: Flutter Android Build
 
 on:
   push:
-    branches: [ "master" ]
+    branches: [ "master", "custom-samsung-routine", "custom-allow-text-address" ]
   pull_request:
     branches: [ "master" ]
 
