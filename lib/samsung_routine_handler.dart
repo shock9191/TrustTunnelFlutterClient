@@ -66,23 +66,23 @@ class _SamsungRoutineListenerWidgetState extends State<SamsungRoutineListenerWid
   void _handleConnectAction() async {
     try {
       final serversController = ServersScope.controllerOf(context, listen: false);
+      final routingController = RoutingScope.controllerOf(context, listen: false);
       
-      // Cold-start wait loop (Wait up to 5 seconds for servers to load)
+      // FIX: Wait for BOTH servers and routing profiles to load from the database
       int retries = 0;
-      while (serversController.servers.isEmpty && retries < 10) {
+      while ((serversController.servers.isEmpty || routingController.routingList.isEmpty) && retries < 10) {
         await Future.delayed(const Duration(milliseconds: 500));
         retries++;
       }
 
+      // If context was lost during the wait, abort safely
+      if (!mounted) return;
+
       final servers = serversController.servers;
-      if (servers.isEmpty) {
-        if (mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(content: Text('Error: Server list empty. Launch app normally first.')),
-          );
-        }
-        return;
-      }
+      final routingList = routingController.routingList;
+
+      // If either list is STILL empty after waiting, abort to prevent a crash
+      if (servers.isEmpty || routingList.isEmpty) return;
       
       final targetServer = servers.firstWhere(
         (s) => s.serverData.name.toLowerCase().trim() == 'server',
@@ -91,7 +91,6 @@ class _SamsungRoutineListenerWidgetState extends State<SamsungRoutineListenerWid
 
       serversController.pickServer(targetServer.id);
 
-      final routingList = RoutingScope.controllerOf(context, listen: false).routingList;
       final routingProfile = routingList.firstWhere(
         (element) => element.id == targetServer.serverData.routingProfileId,
         orElse: () => routingList.first, 
@@ -109,11 +108,7 @@ class _SamsungRoutineListenerWidgetState extends State<SamsungRoutineListenerWid
       await _moveToBgPlugin.moveTaskToBack();
 
     } catch (e) {
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Connection failed: $e')),
-        );
-      }
+      // Ignore errors silently to prevent app crashes in the background
     }
   }
 
@@ -122,11 +117,7 @@ class _SamsungRoutineListenerWidgetState extends State<SamsungRoutineListenerWid
       VpnScope.vpnControllerOf(context, listen: false).stop();
       await _moveToBgPlugin.moveTaskToBack();
     } catch (e) {
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Disconnect failed: $e')),
-        );
-      }
+      // Ignore errors silently
     }
   }
 
