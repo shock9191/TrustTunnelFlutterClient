@@ -38,6 +38,7 @@ class SamsungRoutineListenerWidget extends StatefulWidget {
 
 class _SamsungRoutineListenerWidgetState extends State<SamsungRoutineListenerWidget> {
   StreamSubscription? _routineSubscription;
+  final _moveToBgPlugin = MoveToBg(); // Reverted to your exact working setup
 
   @override
   void initState() {
@@ -53,35 +54,63 @@ class _SamsungRoutineListenerWidgetState extends State<SamsungRoutineListenerWid
     });
   }
 
-  void _handleToggleAction() {
+  // THE WAITING ROOM: Safely waits for Flutter to finish booting without crashing
+  Future<bool> _waitForAppToInitialize() async {
+    for (int i = 0; i < 10; i++) { // Wait up to 5 seconds max
+      try {
+        if (!mounted) return false;
+        
+        // If these scopes aren't ready, they throw an exception which we safely catch.
+        final servers = ServersScope.controllerOf(context, listen: false).servers;
+        final routingList = RoutingScope.controllerOf(context, listen: false).routingList;
+        
+        // Just touching VpnScope to ensure it is ready
+        VpnScope.vpnControllerOf(context, listen: false);
+        
+        // Check if database has actually finished loading
+        if (servers.isNotEmpty && routingList.isNotEmpty) {
+          return true; // App is 100% ready to execute commands!
+        }
+      } catch (e) {
+        // App is still drawing the widget tree, ignore and wait
+      }
+      await Future.delayed(const Duration(milliseconds: 500));
+    }
+    return false; // Timed out
+  }
+
+  void _handleToggleAction() async {
+    bool isReady = await _waitForAppToInitialize();
+    if (!isReady) {
+      await _moveToBgPlugin.moveTaskToBack();
+      return;
+    }
+
     try {
       final vpnController = VpnScope.vpnControllerOf(context, listen: false);
       if (vpnController.state == VpnState.disconnected) {
-        _handleConnectAction();
+        _handleConnectAction(skipInitCheck: true);
       } else {
         _handleDisconnectAction();
       }
     } catch (e) {
-      _closeApp();
+      await _moveToBgPlugin.moveTaskToBack();
     }
   }
 
-  void _handleConnectAction() async {
+  void _handleConnectAction({bool skipInitCheck = false}) async {
     try {
+      if (!skipInitCheck) {
+        bool isReady = await _waitForAppToInitialize();
+        if (!isReady) {
+          await _moveToBgPlugin.moveTaskToBack();
+          return;
+        }
+      }
+
       final serversController = ServersScope.controllerOf(context, listen: false);
-      
-      // Wait up to 3 seconds for database to load on Cold Start
-      for (int i = 0; i < 6; i++) {
-        if (serversController.servers.isNotEmpty) break;
-        await Future.delayed(const Duration(milliseconds: 500));
-      }
-
       final servers = serversController.servers;
-      if (servers.isEmpty) {
-        _closeApp();
-        return;
-      }
-
+      
       final targetServer = servers.firstWhere(
         (s) => s.serverData.name.toLowerCase().trim() == 'server',
         orElse: () => servers.first,
@@ -89,13 +118,7 @@ class _SamsungRoutineListenerWidgetState extends State<SamsungRoutineListenerWid
 
       serversController.pickServer(targetServer.id);
 
-      final routingController = RoutingScope.controllerOf(context, listen: false);
-      final routingList = routingController.routingList;
-      if (routingList.isEmpty) {
-        _closeApp();
-        return;
-      }
-
+      final routingList = RoutingScope.controllerOf(context, listen: false).routingList;
       final routingProfile = routingList.firstWhere(
         (element) => element.id == targetServer.serverData.routingProfileId,
         orElse: () => routingList.first, 
@@ -109,33 +132,25 @@ class _SamsungRoutineListenerWidgetState extends State<SamsungRoutineListenerWid
         routingProfile: routingProfile,
         excludedRoutes: excludedRoutes,
       );
-
+      
+      // Tiny delay to let the VPN tunnel fully establish before minimizing
+      await Future.delayed(const Duration(milliseconds: 500));
+      
     } catch (e) {
-      // Ignore errors silently
-    } 
-    
-    // Always execute the close function regardless of success or error
-    _closeApp();
+      // Safely ignore connection errors
+    } finally {
+      await _moveToBgPlugin.moveTaskToBack();
+    }
   }
 
   void _handleDisconnectAction() async {
     try {
       VpnScope.vpnControllerOf(context, listen: false).stop();
-    } catch (e) {
-      // Ignore errors silently
-    }
-    
-    _closeApp();
-  }
-
-  // Protected Background Function
-  void _closeApp() async {
-    try {
       await Future.delayed(const Duration(milliseconds: 500));
-      final moveToBg = MoveToBg(); // FIXED: Initialized the plugin correctly
-      await moveToBg.moveTaskToBack();
     } catch (e) {
-      // Failsafe
+      // Safely ignore
+    } finally {
+      await _moveToBgPlugin.moveTaskToBack();
     }
   }
 
