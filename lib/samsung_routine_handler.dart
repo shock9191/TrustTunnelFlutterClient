@@ -93,7 +93,6 @@ class _SamsungRoutineListenerWidgetState
     _routineSubscription =
         SamsungRoutineHandler.actionStream.listen((action) {
       _pendingAction = action;
-      // We don't execute immediately. We tell Flutter to execute ONLY after the UI is built.
       if (!_isProcessing) {
         _safeExecute();
       }
@@ -101,13 +100,12 @@ class _SamsungRoutineListenerWidgetState
   }
 
   void _safeExecute() {
-    // This tells Flutter: "Wait until the context is fully mounted and drawn, then run this."
     WidgetsBinding.instance.addPostFrameCallback((_) async {
       if (_pendingAction == null || !mounted || _isProcessing) return;
 
       _isProcessing = true;
       final action = _pendingAction;
-      _pendingAction = null; // Clear the queue
+      _pendingAction = null;
 
       try {
         if (action == 'disconnect_vpn') {
@@ -125,10 +123,9 @@ class _SamsungRoutineListenerWidgetState
           }
         }
       } catch (_) {
-        // Safe catch
+        // ignore
       }
 
-      // Force backgrounding after execution
       _forceBackground();
       _isProcessing = false;
     });
@@ -170,22 +167,23 @@ class _SamsungRoutineListenerWidgetState
     final vpnController =
         VpnScope.vpnControllerOf(context, listen: false);
 
-    await vpnController.start(
-      server: targetServer,
-      routingProfile: routingProfile,
-      excludedRoutes: excludedRoutes,
-    );
+    try {
+      await vpnController.start(
+        server: targetServer,
+        routingProfile: routingProfile,
+        excludedRoutes: excludedRoutes,
+      );
+    } catch (_) {
+      // ignore
+    }
   }
 
   void _forceBackground() async {
     await Future.delayed(const Duration(milliseconds: 500));
-    // Since MoveToBg keeps failing randomly due to Android 12+ restrictions,
-    // we use the native Android intent to go home.
     try {
       const platform = MethodChannel('app_channel');
       await platform.invokeMethod('goHome');
     } catch (_) {
-      // If method channel isn't set up, fallback to standard system pop.
       SystemNavigator.pop();
     }
   }
@@ -198,7 +196,6 @@ class _SamsungRoutineListenerWidgetState
 
   @override
   Widget build(BuildContext context) {
-    // If a pending action arrives while building, process it right after build completes.
     if (_pendingAction != null && !_isProcessing) {
       _safeExecute();
     }
