@@ -1,5 +1,6 @@
 import 'dart:async';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:quick_actions/quick_actions.dart';
 import 'package:move_to_bg/move_to_bg.dart';
 
@@ -15,7 +16,8 @@ class SamsungRoutineHandler {
   static Stream<String> get actionStream => _actionStream.stream;
 
   static void init() {
-    _quickActions.initialize((String shortcutType) async {
+    _quickActions.initialize((String shortcutType) {
+      // Send the action to the stream instantly, no delays blocking the intent.
       _actionStream.add(shortcutType);
     });
 
@@ -37,20 +39,19 @@ class SamsungRoutineListenerWidget extends StatefulWidget {
 
 class _SamsungRoutineListenerWidgetState extends State<SamsungRoutineListenerWidget> {
   StreamSubscription? _routineSubscription;
-  final _moveToBgPlugin = MoveToBg();
 
   @override
   void initState() {
     super.initState();
     _routineSubscription = SamsungRoutineHandler.actionStream.listen((action) {
-      _processActionSafely(action);
+      // Fire and forget so we don't block the UI thread
+      _processAction(action);
     });
   }
 
-  void _processActionSafely(String action) async {
-    // 1. THE BLIND WAIT: Give the app 2 full seconds to completely build its UI and load the DB.
-    // This entirely prevents the silent cold-start crashes. 
-    await Future.delayed(const Duration(milliseconds: 2000));
+  Future<void> _processAction(String action) async {
+    // 1. Give the Scopes time to build natively without blocking the listener
+    await Future.delayed(const Duration(milliseconds: 1500));
 
     if (!mounted) return;
 
@@ -62,8 +63,7 @@ class _SamsungRoutineListenerWidgetState extends State<SamsungRoutineListenerWid
       } else if (action == 'toggle_vpn') {
         final vpnState = VpnScope.vpnControllerOf(context, listen: false).state;
         
-        // FIXED TOGGLE LOGIC: If it is actively connected/connecting, turn it off. 
-        // If it is idle, disconnected, error, or ANYTHING ELSE, turn it on.
+        // If it is anything other than actively connected/connecting, force it ON.
         if (vpnState == VpnState.connected || vpnState == VpnState.connecting) {
           VpnScope.vpnControllerOf(context, listen: false).stop();
         } else {
@@ -71,29 +71,24 @@ class _SamsungRoutineListenerWidgetState extends State<SamsungRoutineListenerWid
         }
       }
     } catch (e) {
-      // Catch connection errors silently so they DO NOT stop the backgrounding process
+      // Ignore connection errors
     }
 
-    // 2. THE GUARANTEED BACKGROUND: Wait 1 second for VPN commands to register, then minimize.
-    // Because this is outside the logic block above, it will fire 100% of the time.
-    await Future.delayed(const Duration(milliseconds: 1000));
-    try {
-      await _moveToBgPlugin.moveTaskToBack();
-    } catch (e) {
-      // Failsafe
-    }
+    // 2. Force the app out of the foreground
+    _forceBackground();
   }
 
   Future<void> _executeConnect() async {
     final serversController = ServersScope.controllerOf(context, listen: false);
     
-    // Safety check: if DB is still slow after the 2s wait, give it 1 more second.
-    if (serversController.servers.isEmpty) {
-      await Future.delayed(const Duration(milliseconds: 1000));
+    // Safety loop: wait up to 2 seconds for DB if it's slow
+    for (int i = 0; i < 4; i++) {
+      if (serversController.servers.isNotEmpty) break;
+      await Future.delayed(const Duration(milliseconds: 500));
     }
     
     final servers = serversController.servers;
-    if (servers.isEmpty) return; // Abort safely if literally zero servers exist
+    if (servers.isEmpty) return;
 
     final targetServer = servers.firstWhere(
       (s) => s.serverData.name.toLowerCase().trim() == 'server',
@@ -119,6 +114,23 @@ class _SamsungRoutineListenerWidgetState extends State<SamsungRoutineListenerWid
       routingProfile: routingProfile,
       excludedRoutes: excludedRoutes,
     );
+  }
+
+  void _forceBackground() async {
+    // Wait slightly to let the VPN command reach the engine
+    await Future.delayed(const Duration(milliseconds: 800));
+    
+    try {
+      final moveToBg = MoveToBg();
+      await moveToBg.moveTaskToBack();
+    } catch (e) {
+      try {
+        // Fallback: If moveTaskToBack fails, pop the app context natively
+        SystemNavigator.pop();
+      } catch (e2) {
+        // Ignore
+      }
+    }
   }
 
   @override
