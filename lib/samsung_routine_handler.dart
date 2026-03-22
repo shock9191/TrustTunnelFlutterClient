@@ -4,6 +4,9 @@ import 'package:quick_actions/quick_actions.dart';
 import 'package:move_to_bg/move_to_bg.dart';
 import 'package:trusttunnel/feature/server/servers/widget/scope/servers_scope.dart';
 import 'package:trusttunnel/feature/vpn/widgets/vpn_scope.dart';
+// ADDED THESE TWO IMPORTS
+import 'package:trusttunnel/feature/routing/routing/widgets/scope/routing_scope.dart';
+import 'package:trusttunnel/feature/settings/excluded_routes/widgets/scope/excluded_routes_scope.dart';
 
 class SamsungRoutineHandler {
   static final QuickActions _quickActions = const QuickActions();
@@ -42,7 +45,7 @@ class SamsungRoutineListenerWidget extends StatefulWidget {
 
 class _SamsungRoutineListenerWidgetState extends State<SamsungRoutineListenerWidget> {
   StreamSubscription? _routineSubscription;
-  final _moveToBgPlugin = MoveToBg(); // Declared the plugin correctly
+  final _moveToBgPlugin = MoveToBg();
 
   @override
   void initState() {
@@ -56,29 +59,47 @@ class _SamsungRoutineListenerWidgetState extends State<SamsungRoutineListenerWid
     });
   }
 
-  // Added async keyword
   void _handleConnectAction() async {
-    final serversController = ServersScope.controllerOf(context, listen: false);
-    
-    final servers = serversController.servers;
-    if (servers.isEmpty) return;
-    
-    final targetServer = servers.firstWhere(
-      (s) => s.serverData.name.toLowerCase().trim() == 'server',
-      orElse: () => servers.first,
-    );
+    try {
+      final serversController = ServersScope.controllerOf(context, listen: false);
+      final servers = serversController.servers;
+      if (servers.isEmpty) return;
+      
+      final targetServer = servers.firstWhere(
+        (s) => s.serverData.name.toLowerCase().trim() == 'server',
+        orElse: () => servers.first,
+      );
 
-    serversController.pickServer(targetServer.id);
+      // 1. Mark the server as selected in the UI
+      serversController.pickServer(targetServer.id);
 
-    // Fixed minimize command
-    await _moveToBgPlugin.moveTaskToBack();
+      // 2. Fetch the required parameters from the UI scopes
+      final routingList = RoutingScope.controllerOf(context, listen: false).routingList;
+      final routingProfile = routingList.firstWhere(
+        (element) => element.id == targetServer.serverData.routingProfileId,
+        orElse: () => routingList.first, // Fallback to first profile
+      );
+
+      final excludedRoutes = ExcludedRoutesScope.controllerOf(context, listen: false).excludedRoutes;
+
+      // 3. EXPLICITLY START THE VPN!
+      final vpnController = VpnScope.vpnControllerOf(context, listen: false);
+      await vpnController.start(
+        server: targetServer,
+        routingProfile: routingProfile,
+        excludedRoutes: excludedRoutes,
+      );
+
+    } catch (e) {
+      // Ignore errors silently to prevent crashes
+    } finally {
+      // 4. Immediately push the app back to the background
+      await _moveToBgPlugin.moveTaskToBack();
+    }
   }
 
-  // Added async keyword
   void _handleDisconnectAction() async {
     VpnScope.vpnControllerOf(context, listen: false).stop();
-
-    // Fixed minimize command
     await _moveToBgPlugin.moveTaskToBack();
   }
 
