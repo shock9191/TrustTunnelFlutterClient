@@ -15,14 +15,25 @@ class QueryLogScreenView extends StatefulWidget {
 }
 
 class _QueryLogScreenViewState extends State<QueryLogScreenView> {
-  List<VpnLog> logs = [];
+  List<VpnLog> _logs = [];
+
+  late final ScrollController _scrollController;
+
+  @override
+  void initState() {
+    super.initState();
+    _scrollController = ScrollController();
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      _scrollController.jumpTo(_scrollController.position.maxScrollExtent);
+    });
+  }
 
   @override
   void didChangeDependencies() {
     super.didChangeDependencies();
     final logController = VpnScope.logsControllerOf(context);
-    if (!listEquals(logController.logs, logs)) {
-      logs = [...logController.logs];
+    if (!listEquals(logController.logs, _logs)) {
+      _logs = [...logController.logs];
     }
   }
 
@@ -30,18 +41,45 @@ class _QueryLogScreenViewState extends State<QueryLogScreenView> {
   Widget build(BuildContext context) => ScaffoldWrapper(
     child: Scaffold(
       appBar: CustomAppBar(title: context.ln.queryLog),
-      body: ListView.separated(
-        itemBuilder: (context, index) {
-          final log = logs[logs.length - (index + 1)];
-
-          return QueryLogCard(
-            key: ValueKey(log.timeStamp.microsecondsSinceEpoch),
-            log: log,
-          );
-        },
-        separatorBuilder: (_, __) => const Divider(),
-        itemCount: logs.length,
+      body: QueryLogListView(
+        logs: _logs,
+        controller: _scrollController,
       ),
     ),
+  );
+
+  @override
+  void dispose() {
+    _scrollController.dispose();
+    super.dispose();
+  }
+}
+
+class QueryLogListView extends StatelessWidget {
+  final ScrollController? controller;
+  final List<VpnLog> logs;
+
+  const QueryLogListView({
+    super.key,
+    this.controller,
+    required this.logs,
+  });
+
+  @override
+  Widget build(BuildContext context) => ListView.separated(
+    controller: controller,
+    reverse: true,
+    shrinkWrap: logs.length < 50,
+
+    itemBuilder: (context, index) {
+      final log = logs[index];
+
+      return QueryLogCard(
+        key: ValueKey(log.timeStamp.microsecondsSinceEpoch),
+        log: log,
+      );
+    },
+    separatorBuilder: (_, __) => const Divider(),
+    itemCount: logs.length,
   );
 }
