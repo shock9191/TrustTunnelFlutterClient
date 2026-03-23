@@ -1,4 +1,5 @@
 import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:quick_actions/quick_actions.dart';
@@ -18,7 +19,7 @@ class SamsungRoutineHandler {
   static Stream<String> get actionStream => _actionStream.stream;
 
   static void init() {
-    // Quick‑actions from long‑press icon (optional)
+    // Optional: quick actions from long‑press app icon.
     _quickActions.initialize((String shortcutType) async {
       await Future.delayed(const Duration(seconds: 1));
       _actionStream.add(shortcutType);
@@ -33,7 +34,7 @@ class SamsungRoutineHandler {
     ]);
   }
 
-  // This is for MainActivity / tile to inject "toggle_vpn" directly.
+  // Called from platform (toggle_channel) when the tile is pressed.
   static void triggerToggleFromPlatform() {
     _actionStream.add('toggle_vpn');
   }
@@ -71,15 +72,16 @@ class _SamsungRoutineListenerWidgetState
       final vpnController =
           VpnScope.vpnControllerOf(context, listen: false);
 
+      // If already connected/connecting -> DISCONNECT then background
       if (vpnController.state == VpnState.connected ||
           vpnController.state == VpnState.connecting) {
-        // DISCONNECT PATH
         vpnController.stop();
         await _moveToBgPlugin.moveTaskToBack();
         return;
       }
 
-      // CONNECT PATH – your working logic
+      // CONNECT path (your proven logic)
+
       final serversController =
           ServersScope.controllerOf(context, listen: false);
       final servers = serversController.servers;
@@ -121,9 +123,9 @@ class _SamsungRoutineListenerWidgetState
         excludedRoutes: excludedRoutes,
       );
     } catch (_) {
-      // swallow error
+      // Ignore errors to avoid crashes from background trigger
     } finally {
-      // 4. Immediately push the app back to the background
+      // 4. Push the app to background
       await _moveToBgPlugin.moveTaskToBack();
     }
   }
