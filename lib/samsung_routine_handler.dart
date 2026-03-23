@@ -1,8 +1,8 @@
 import 'dart:async';
-
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:quick_actions/quick_actions.dart';
+import 'package:move_to_bg/move_to_bg.dart';
 
 import 'package:trusttunnel/data/model/vpn_state.dart';
 import 'package:trusttunnel/feature/server/servers/widget/scope/servers_scope.dart';
@@ -10,36 +10,21 @@ import 'package:trusttunnel/feature/vpn/widgets/vpn_scope.dart';
 import 'package:trusttunnel/feature/routing/routing/widgets/scope/routing_scope.dart';
 import 'package:trusttunnel/feature/settings/excluded_routes/widgets/scope/excluded_routes_scope.dart';
 
-/// Handles Samsung routines, launcher shortcuts and static shortcuts.
 class SamsungRoutineHandler {
   static final QuickActions _quickActions = const QuickActions();
-
   static final StreamController<String> _actionStream =
       StreamController<String>.broadcast();
-
-  // Exposed so bootstrap can push initial shortcut types.
-  static StreamController<String> get actionStreamController =>
-      _actionStream;
 
   static Stream<String> get actionStream => _actionStream.stream;
 
   static void init() {
-    // Dynamic shortcuts (quick_actions plugin, works with many launchers).
-    _quickActions.initialize((String shortcutType) {
+    // Quick‑actions from long‑press icon (optional)
+    _quickActions.initialize((String shortcutType) async {
+      await Future.delayed(const Duration(seconds: 1));
       _actionStream.add(shortcutType);
     });
 
     _quickActions.setShortcutItems(<ShortcutItem>[
-      const ShortcutItem(
-        type: 'connect_work_server',
-        localizedTitle: 'Connect',
-        icon: 'ic_launcher',
-      ),
-      const ShortcutItem(
-        type: 'disconnect_vpn',
-        localizedTitle: 'Disconnect',
-        icon: 'ic_launcher',
-      ),
       const ShortcutItem(
         type: 'toggle_vpn',
         localizedTitle: 'Toggle VPN',
@@ -47,32 +32,16 @@ class SamsungRoutineHandler {
       ),
     ]);
   }
-}
 
-/// Reads the initial static shortcut "type" from Android (via MainActivity)
-/// and feeds it into SamsungRoutineHandler so the same logic runs.
-///
-/// Call `AndroidShortcutBootstrap.init()` in `main()` AFTER
-/// `SamsungRoutineHandler.init()` and BEFORE `runApp(...)`.
-class AndroidShortcutBootstrap {
-  static const MethodChannel _launchChannel =
-      MethodChannel('launch_channel');
-
-  static Future<void> init() async {
-    try {
-      final String? type =
-          await _launchChannel.invokeMethod<String>('getInitialShortcutType');
-      if (type != null && type.isNotEmpty) {
-        SamsungRoutineHandler.actionStreamController.add(type);
-      }
-    } catch (_) {
-      // Ignore if channel not available.
-    }
+  // This is for MainActivity / tile to inject "toggle_vpn" directly.
+  static void triggerToggleFromPlatform() {
+    _actionStream.add('toggle_vpn');
   }
 }
 
 class SamsungRoutineListenerWidget extends StatefulWidget {
   final Widget child;
+
   const SamsungRoutineListenerWidget({Key? key, required this.child})
       : super(key: key);
 
@@ -84,107 +53,78 @@ class SamsungRoutineListenerWidget extends StatefulWidget {
 class _SamsungRoutineListenerWidgetState
     extends State<SamsungRoutineListenerWidget> {
   StreamSubscription<String>? _routineSubscription;
-  String? _pendingAction; // Stores the action if the app is still booting
-  bool _isProcessing = false;
+  final _moveToBgPlugin = MoveToBg();
 
   @override
   void initState() {
     super.initState();
     _routineSubscription =
         SamsungRoutineHandler.actionStream.listen((action) {
-      _pendingAction = action;
-      if (!_isProcessing) {
-        _safeExecute();
+      if (action == 'toggle_vpn') {
+        _handleToggleAction();
       }
     });
   }
 
-  void _safeExecute() {
-    WidgetsBinding.instance.addPostFrameCallback((_) async {
-      if (_pendingAction == null || !mounted || _isProcessing) return;
-
-      _isProcessing = true;
-      final action = _pendingAction;
-      _pendingAction = null;
-
-      try {
-        if (action == 'disconnect_vpn') {
-          VpnScope.vpnControllerOf(context, listen: false).stop();
-        } else if (action == 'connect_work_server') {
-          await _executeConnect();
-        } else if (action == 'toggle_vpn') {
-          final vpnState =
-              VpnScope.vpnControllerOf(context, listen: false).state;
-          if (vpnState == VpnState.connected ||
-              vpnState == VpnState.connecting) {
-            VpnScope.vpnControllerOf(context, listen: false).stop();
-          } else {
-            await _executeConnect();
-          }
-        }
-      } catch (_) {
-        // ignore
-      }
-
-      _forceBackground();
-      _isProcessing = false;
-    });
-  }
-
-  Future<void> _executeConnect() async {
-    final serversController =
-        ServersScope.controllerOf(context, listen: false);
-
-    // Give the database a moment to load if it is a fresh cold start.
-    for (int i = 0; i < 4; i++) {
-      if (serversController.servers.isNotEmpty) break;
-      await Future.delayed(const Duration(milliseconds: 500));
-    }
-
-    final servers = serversController.servers;
-    if (servers.isEmpty) return;
-
-    final targetServer = servers.firstWhere(
-      (s) => s.serverData.name.toLowerCase().trim() == 'server',
-      orElse: () => servers.first,
-    );
-
-    serversController.pickServer(targetServer.id);
-
-    final routingController =
-        RoutingScope.controllerOf(context, listen: false);
-    final routingList = routingController.routingList;
-    if (routingList.isEmpty) return;
-
-    final routingProfile = routingList.firstWhere(
-      (element) => element.id == targetServer.serverData.routingProfileId,
-      orElse: () => routingList.first,
-    );
-
-    final excludedRoutes =
-        ExcludedRoutesScope.controllerOf(context, listen: false)
-            .excludedRoutes;
-    final vpnController =
-        VpnScope.vpnControllerOf(context, listen: false);
-
+  Future<void> _handleToggleAction() async {
     try {
+      final vpnController =
+          VpnScope.vpnControllerOf(context, listen: false);
+
+      if (vpnController.state == VpnState.connected ||
+          vpnController.state == VpnState.connecting) {
+        // DISCONNECT PATH
+        vpnController.stop();
+        await _moveToBgPlugin.moveTaskToBack();
+        return;
+      }
+
+      // CONNECT PATH – your working logic
+      final serversController =
+          ServersScope.controllerOf(context, listen: false);
+      final servers = serversController.servers;
+      if (servers.isEmpty) {
+        await _moveToBgPlugin.moveTaskToBack();
+        return;
+      }
+
+      final targetServer = servers.firstWhere(
+        (s) => s.serverData.name.toLowerCase().trim() == 'server',
+        orElse: () => servers.first,
+      );
+
+      // 1. Mark the server as selected in the UI
+      serversController.pickServer(targetServer.id);
+
+      // 2. Fetch the required parameters from the UI scopes
+      final routingList =
+          RoutingScope.controllerOf(context, listen: false).routingList;
+      if (routingList.isEmpty) {
+        await _moveToBgPlugin.moveTaskToBack();
+        return;
+      }
+
+      final routingProfile = routingList.firstWhere(
+        (element) =>
+            element.id == targetServer.serverData.routingProfileId,
+        orElse: () => routingList.first,
+      );
+
+      final excludedRoutes =
+          ExcludedRoutesScope.controllerOf(context, listen: false)
+              .excludedRoutes;
+
+      // 3. EXPLICITLY START THE VPN
       await vpnController.start(
         server: targetServer,
         routingProfile: routingProfile,
         excludedRoutes: excludedRoutes,
       );
     } catch (_) {
-      // ignore
-    }
-  }
-
-  void _forceBackground() async {
-    await Future.delayed(const Duration(milliseconds: 500));
-    try {
-      const platform = MethodChannel('app_channel');
-      await platform.invokeMethod('goHome');
-    } catch (_) {
-      SystemNavigator.pop();
+      // swallow error
+    } finally {
+      // 4. Immediately push the app back to the background
+      await _moveToBgPlugin.moveTaskToBack();
     }
   }
 
@@ -196,9 +136,6 @@ class _SamsungRoutineListenerWidgetState
 
   @override
   Widget build(BuildContext context) {
-    if (_pendingAction != null && !_isProcessing) {
-      _safeExecute();
-    }
     return widget.child;
   }
 }

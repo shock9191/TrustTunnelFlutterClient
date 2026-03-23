@@ -3,6 +3,7 @@ import 'dart:developer';
 
 import 'package:flutter/material.dart' hide Router;
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 
 import 'samsung_routine_handler.dart';
 
@@ -16,17 +17,28 @@ import 'package:trusttunnel/feature/settings/excluded_routes/widgets/scope/exclu
 import 'package:trusttunnel/feature/vpn/widgets/vpn_scope.dart';
 import 'package:trusttunnel/feature/vpn/widgets/vpn_update_manager.dart';
 
+Future<void> _initToggleChannel() async {
+  const platform = MethodChannel('toggle_channel');
+
+  platform.setMethodCallHandler((call) async {
+    if (call.method == 'toggleFromPlatform') {
+      // Forward tile trigger into the SamsungRoutine pipeline
+      SamsungRoutineHandler.triggerToggleFromPlatform();
+    }
+  });
+}
+
 void main() => runZonedGuarded(
       () async {
         WidgetsFlutterBinding.ensureInitialized();
 
         final initializationResult = await InitializationHelperIo().init();
 
-        // Set up dynamic quick actions.
+        // Set up quick actions / Samsung routine handler.
         SamsungRoutineHandler.init();
 
-        // Pull static shortcut type from MainActivity (launcher shortcuts / tiles).
-        await AndroidShortcutBootstrap.init();
+        // Set up platform channel used by the Quick Settings tile.
+        await _initToggleChannel();
 
         runApp(
           DependencyScope(
