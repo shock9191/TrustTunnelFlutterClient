@@ -13,7 +13,7 @@ class ToggleVpnTileService : TileService() {
         tile?.state = Tile.STATE_ACTIVE
         tile?.updateTile()
 
-        // Launch MainActivity with a custom action that we detect in MainActivity
+        // Launch MainActivity with a custom action we can detect
         val intent = Intent(this, MainActivity::class.java).apply {
             action = "com.adguard.trusttunnel.TOGGLE_VPN"
             addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)

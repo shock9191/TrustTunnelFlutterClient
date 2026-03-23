@@ -28,7 +28,7 @@ class MainActivity : FlutterActivity() {
             TOGGLE_CHANNEL
         )
 
-        // If we were launched from the Quick Settings tile, immediately tell Dart
+        // If we were launched from the Quick Settings tile, immediately notify Dart
         if (intent?.action == "com.adguard.trusttunnel.TOGGLE_VPN") {
             toggleChannel.invokeMethod("toggleFromPlatform", null)
         }

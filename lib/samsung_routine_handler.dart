@@ -1,7 +1,5 @@
 import 'dart:async';
-
 import 'package:flutter/material.dart';
-import 'package:flutter/services.dart';
 import 'package:quick_actions/quick_actions.dart';
 import 'package:move_to_bg/move_to_bg.dart';
 
@@ -15,28 +13,32 @@ class SamsungRoutineHandler {
   static final QuickActions _quickActions = const QuickActions();
   static final StreamController<String> _actionStream =
       StreamController<String>.broadcast();
-
   static Stream<String> get actionStream => _actionStream.stream;
 
   static void init() {
-    // Optional: quick actions from long‑press app icon.
     _quickActions.initialize((String shortcutType) async {
+      // Small delay so scopes are ready after cold start
       await Future.delayed(const Duration(seconds: 1));
       _actionStream.add(shortcutType);
     });
 
     _quickActions.setShortcutItems(<ShortcutItem>[
       const ShortcutItem(
+        type: 'connect_work_server',
+        localizedTitle: 'Connect to Work Server',
+        icon: 'ic_launcher',
+      ),
+      const ShortcutItem(
+        type: 'disconnect_vpn',
+        localizedTitle: 'Disconnect VPN',
+        icon: 'ic_launcher',
+      ),
+      const ShortcutItem(
         type: 'toggle_vpn',
         localizedTitle: 'Toggle VPN',
         icon: 'ic_launcher',
       ),
     ]);
-  }
-
-  // Called from platform (toggle_channel) when the tile is pressed.
-  static void triggerToggleFromPlatform() {
-    _actionStream.add('toggle_vpn');
   }
 }
 
@@ -61,34 +63,34 @@ class _SamsungRoutineListenerWidgetState
     super.initState();
     _routineSubscription =
         SamsungRoutineHandler.actionStream.listen((action) {
-      if (action == 'toggle_vpn') {
+      if (action == 'connect_work_server') {
+        _handleConnectAction();
+      } else if (action == 'disconnect_vpn') {
+        _handleDisconnectAction();
+      } else if (action == 'toggle_vpn') {
         _handleToggleAction();
       }
     });
   }
 
   Future<void> _handleToggleAction() async {
+    final vpnController =
+        VpnScope.vpnControllerOf(context, listen: false);
+
+    if (vpnController.state == VpnState.connected ||
+        vpnController.state == VpnState.connecting) {
+      await _handleDisconnectAction();
+    } else {
+      await _handleConnectAction();
+    }
+  }
+
+  Future<void> _handleConnectAction() async {
     try {
-      final vpnController =
-          VpnScope.vpnControllerOf(context, listen: false);
-
-      // If already connected/connecting -> DISCONNECT then background
-      if (vpnController.state == VpnState.connected ||
-          vpnController.state == VpnState.connecting) {
-        vpnController.stop();
-        await _moveToBgPlugin.moveTaskToBack();
-        return;
-      }
-
-      // CONNECT path (your proven logic)
-
       final serversController =
           ServersScope.controllerOf(context, listen: false);
       final servers = serversController.servers;
-      if (servers.isEmpty) {
-        await _moveToBgPlugin.moveTaskToBack();
-        return;
-      }
+      if (servers.isEmpty) return;
 
       final targetServer = servers.firstWhere(
         (s) => s.serverData.name.toLowerCase().trim() == 'server',
@@ -101,10 +103,7 @@ class _SamsungRoutineListenerWidgetState
       // 2. Fetch the required parameters from the UI scopes
       final routingList =
           RoutingScope.controllerOf(context, listen: false).routingList;
-      if (routingList.isEmpty) {
-        await _moveToBgPlugin.moveTaskToBack();
-        return;
-      }
+      if (routingList.isEmpty) return;
 
       final routingProfile = routingList.firstWhere(
         (element) =>
@@ -116,18 +115,27 @@ class _SamsungRoutineListenerWidgetState
           ExcludedRoutesScope.controllerOf(context, listen: false)
               .excludedRoutes;
 
-      // 3. EXPLICITLY START THE VPN
+      // 3. Explicitly start the VPN
+      final vpnController =
+          VpnScope.vpnControllerOf(context, listen: false);
       await vpnController.start(
         server: targetServer,
         routingProfile: routingProfile,
         excludedRoutes: excludedRoutes,
       );
     } catch (_) {
-      // Ignore errors to avoid crashes from background trigger
+      // swallow
     } finally {
-      // 4. Push the app to background
+      // 4. Immediately push the app back to the background
       await _moveToBgPlugin.moveTaskToBack();
     }
+  }
+
+  Future<void> _handleDisconnectAction() async {
+    try {
+      VpnScope.vpnControllerOf(context, listen: false).stop();
+    } catch (_) {}
+    await _moveToBgPlugin.moveTaskToBack();
   }
 
   @override
