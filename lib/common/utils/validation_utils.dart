@@ -49,13 +49,12 @@ abstract final class ValidationUtils {
       r'(?:[A-Za-z]{2,63}|xn--[A-Za-z0-9-]{2,58}))'
       r'(?:/[^ \t\r\n]*)?#h3$';
 
-  static const allowableStartRegex = r'^(tls:\/\/|https:\/\/|http:\/\/|quic:\/\/|h3:\/\/|sdns:\/\/|)';
+  static const allowableStartRegex = r'^(tls:\/\/|https:\/\/|http:\/\/|quic:\/\/|h3:\/\/|sdns:\/\/)';
 
   static final RegExp _cidrRegExp = RegExp(cidrRegex);
   static final RegExp _firstLevelDomainRegExp = RegExp(firstLevelDomainRegex);
   static final RegExp _domainRegExp = RegExp(domainRawRegex);
   static final RegExp _domainWithAliasRegExp = RegExp(domainWithAliasRawRegex);
-  static final RegExp _allowableStartRegExp = RegExp(allowableStartRegex);
   static final PunycodeCodec _punycodeCodec = const PunycodeCodec();
 
   static String? getErrorString(
@@ -79,6 +78,18 @@ abstract final class ValidationUtils {
     }
 
     return _isIp(parsed.host);
+  }
+
+  static bool validateDnsStamp(String value) {
+    final normalized = value.trim();
+
+    if (!normalized.startsWith('sdns://')) {
+      return false;
+    }
+
+    final payload = normalized.substring('sdns://'.length);
+
+    return payload.isNotEmpty && RegExp(r'^[A-Za-z0-9_-]+={0,2}$').hasMatch(payload);
   }
 
   static bool validateServerAddress(String value, {bool allowPort = true}) {
@@ -140,32 +151,6 @@ abstract final class ValidationUtils {
     acceptLeadingDot: false,
     acceptAlias: false,
   );
-
-  static bool validateDnsServer(String value) {
-    final rawValue = value.trim();
-    if (rawValue.isEmpty) {
-      return false;
-    }
-
-    if (_looksLikeSupportedDnsUri(rawValue)) {
-      final uri = Uri.tryParse(rawValue);
-      if (uri == null) {
-        return false;
-      }
-
-      if (uri.host.isEmpty) {
-        return false;
-      }
-
-      if (uri.hasPort && !_isValidPort(uri.port.toString())) {
-        return false;
-      }
-
-      return _isIp(uri.host) || tryParseDomain(uri.host) != null;
-    }
-
-    return validateServerAddress(rawValue);
-  }
 
   static bool validateCidr(String cidr) {
     if (!_cidrRegExp.hasMatch(cidr)) {
@@ -273,8 +258,6 @@ abstract final class ValidationUtils {
   static bool _isIp(String value) => InternetAddress.tryParse(value) != null;
 
   static bool _isIpv6(String value) => InternetAddress.tryParse(value)?.type == InternetAddressType.IPv6;
-
-  static bool _looksLikeSupportedDnsUri(String value) => _allowableStartRegExp.hasMatch(value);
 
   static String? _parseDomain(
     String domain, {

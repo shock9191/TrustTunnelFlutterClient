@@ -162,10 +162,74 @@ class ServerDetailsServiceImpl implements ServerDetailsService {
       return null;
     }
 
-    final valid = ValidationUtils.tryParseDomain(sni!) != null;
+    sni = sni!.trim();
+
+    final valid = ValidationUtils.tryParseDomain(sni) != null;
 
     if (!valid) {
       return _getFieldWrongValue(PresentationFieldName.sni);
+    }
+
+    return null;
+  }
+
+  PresentationField? _validateDnsServers(List<String> dnsServers) {
+    final fieldName = PresentationFieldName.dnsServers;
+
+    if (dnsServers.isEmpty) {
+      return _getRequiredField(fieldName);
+    }
+
+    for (var dnsServer in dnsServers) {
+      dnsServer = dnsServer.trim();
+
+      if (dnsServer.isEmpty) {
+        return _getFieldWrongValue(fieldName);
+      }
+
+      // 1. DNS stamp
+      if (dnsServer.startsWith('sdns://')) {
+        if (!ValidationUtils.validateDnsStamp(dnsServer)) {
+          return _getFieldWrongValue(fieldName);
+        }
+        continue;
+      }
+
+      // 2. URI-based DNS
+      if (RegExp(r'^(tls:\/\/|https:\/\/|http:\/\/|quic:\/\/|h3:\/\/)').hasMatch(dnsServer)) {
+        final parsedUri = Uri.tryParse(dnsServer);
+        if (parsedUri == null || parsedUri.host.isEmpty) {
+          return _getFieldWrongValue(fieldName);
+        }
+
+        dnsServer = parsedUri.host + (parsedUri.hasPort ? ':${parsedUri.port}' : '');
+      }
+
+      // 3. host[:port] / ip[:port]
+      String? port;
+      final divided = dnsServer.split(':');
+
+      if (dnsServer.startsWith('[')) {
+        port = divided.removeLast();
+        dnsServer = divided.join(':').replaceAll(RegExp(r'[\[\]]'), '');
+      } else if (divided.length == 2) {
+        port = divided.last;
+        dnsServer = divided.first;
+      }
+
+      final parsedPort = int.tryParse(port ?? '');
+      if (port != null && parsedPort == null) {
+        return _getFieldWrongValue(fieldName);
+      }
+
+      if (parsedPort != null && (parsedPort < 1 || parsedPort > 65535)) {
+        return _getFieldWrongValue(fieldName);
+      }
+
+      if (!ValidationUtils.validateIpAddress(dnsServer, allowPort: false) &&
+          ValidationUtils.tryParseDomain(dnsServer) == null) {
+        return _getFieldWrongValue(fieldName);
+      }
     }
 
     return null;
@@ -199,22 +263,6 @@ class ServerDetailsServiceImpl implements ServerDetailsService {
     final fieldName = PresentationFieldName.password;
     if (password.isEmpty) {
       return _getRequiredField(fieldName);
-    }
-
-    return null;
-  }
-
-  PresentationField? _validateDnsServers(List<String> dnsServers) {
-    final fieldName = PresentationFieldName.dnsServers;
-
-    if (dnsServers.isEmpty) {
-      return _getRequiredField(fieldName);
-    }
-
-    for (final dnsServer in dnsServers) {
-      if (!ValidationUtils.validateDnsServer(dnsServer)) {
-        return _getFieldWrongValue(fieldName);
-      }
     }
 
     return null;

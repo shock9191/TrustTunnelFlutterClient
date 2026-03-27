@@ -1,3 +1,4 @@
+import 'package:collection/collection.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:trusttunnel/data/model/routing_profile.dart';
@@ -43,7 +44,9 @@ class _VpnUpdateManagerState extends State<VpnUpdateManager> {
   @override
   void didChangeDependencies() {
     super.didChangeDependencies();
-    final updatedServer = ServersScope.controllerOf(context, aspect: ServersScopeAspect.selectedServer).selectedServer;
+    final serverScope = ServersScope.controllerOf(context, aspect: ServersScopeAspect.selectedServer);
+
+    final updatedServer = serverScope.selectedServer;
 
     final updatedRoutingProfileList = RoutingScope.controllerOf(
       context,
@@ -70,9 +73,15 @@ class _VpnUpdateManagerState extends State<VpnUpdateManager> {
       return;
     }
 
-    final updatedRoutingProfile = updatedRoutingProfileList.firstWhere(
+    final updatedRoutingProfile = updatedRoutingProfileList.firstWhereOrNull(
       (element) => element.id == updatedServer.serverData.routingProfileId,
     );
+
+    if (updatedRoutingProfile == null) {
+      serverScope.fetchServers();
+
+      return;
+    }
 
     if (_selectedServer != updatedServer ||
         _selectedRoutingProfile != updatedRoutingProfile ||
@@ -112,7 +121,13 @@ class _VpnUpdateManagerState extends State<VpnUpdateManager> {
       routingProfile: routingProfile,
       excludedRoutes: excludedRoutes,
     );
-    await controller.start(server: server, routingProfile: routingProfile, excludedRoutes: excludedRoutes);
+
+    await controller.start(
+      server: server,
+      routingProfile: routingProfile,
+      excludedRoutes: excludedRoutes,
+    );
+
     _selectedServer = server;
     _selectedRoutingProfile = routingProfile;
     _excludedRoutes = excludedRoutes;
