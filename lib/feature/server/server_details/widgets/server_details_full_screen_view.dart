@@ -1,3 +1,4 @@
+import 'package:collection/collection.dart';
 import 'package:flutter/material.dart';
 import 'package:trusttunnel/common/assets/asset_icons.dart';
 import 'package:trusttunnel/common/extensions/context_extensions.dart';
@@ -7,6 +8,7 @@ import 'package:trusttunnel/feature/server/server_details/widgets/scope/server_d
 import 'package:trusttunnel/feature/server/server_details/widgets/scope/server_details_scope_aspect.dart';
 import 'package:trusttunnel/feature/server/server_details/widgets/server_details_delete_dialog.dart';
 import 'package:trusttunnel/feature/server/servers/widget/scope/servers_scope.dart';
+import 'package:trusttunnel/feature/vpn/widgets/vpn_scope.dart';
 import 'package:trusttunnel/widgets/buttons/custom_icon_button.dart';
 import 'package:trusttunnel/widgets/common/scaffold_messenger_provider.dart';
 import 'package:trusttunnel/widgets/custom_app_bar.dart';
@@ -129,7 +131,20 @@ class _ServerDetailsFullScreenViewState extends State<ServerDetailsFullScreenVie
     if (!mounted) {
       return;
     }
-    ServersScope.controllerOf(context, listen: false).fetchServers();
+
+    VpnScope.vpnControllerOf(context, listen: false).stop();
+
+    final serverScope = ServersScope.controllerOf(context, listen: false);
+
+    final server = ServerDetailsScope.controllerOf(context, listen: false);
+
+    if (server.data.selected) {
+      final updatedData = serverScope.servers.where((s) => s.id != server.id);
+
+      serverScope.pickServer(updatedData.firstOrNull?.id);
+    }
+
+    serverScope.fetchServers();
 
     if (Navigator.of(context).canPop()) {
       context.pop();

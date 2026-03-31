@@ -34,18 +34,13 @@ class _VpnUpdateManagerState extends State<VpnUpdateManager> {
   @override
   void didChangeDependencies() {
     super.didChangeDependencies();
+
     final serverScope = ServersScope.controllerOf(
       context,
       aspect: ServersScopeAspect.selectedServer,
     );
 
     final updatedServer = serverScope.selectedServer;
-
-    if (_selectedServer == null) {
-      _selectedServer = updatedServer;
-
-      return;
-    }
 
     final updatedRoutingProfileList = RoutingScope.controllerOf(
       context,
@@ -62,13 +57,34 @@ class _VpnUpdateManagerState extends State<VpnUpdateManager> {
       listen: false,
     );
 
+    if (_selectedServer != updatedServer) {
+      if (updatedServer == null) {
+        _deleteConfig(controller: vpnController);
+      } else if (_selectedServer != null) {
+        final routingProfile = updatedRoutingProfileList.firstWhere(
+          (element) => element.id == updatedServer.serverData.routingProfileId,
+        );
+
+        _updateConfig(
+          controller: vpnController,
+          server: updatedServer,
+          routingProfile: routingProfile,
+          excludedRoutes: updatedExcludedRoutes,
+        );
+      }
+    }
+
+    if (_selectedServer == null) {
+      _selectedServer = updatedServer;
+
+      return;
+    }
+
     if (vpnController.state == VpnState.disconnected) {
       return;
     }
 
     if (updatedServer == null) {
-      _deleteConfig(controller: vpnController);
-
       return;
     }
 
@@ -94,15 +110,28 @@ class _VpnUpdateManagerState extends State<VpnUpdateManager> {
     }
   }
 
-  /* #endregion */
-
   @override
   Widget build(BuildContext context) => widget.child;
+
+  Future<void> _updateConfig({
+    required VpnController controller,
+    required Server server,
+    required RoutingProfile routingProfile,
+    required List<String> excludedRoutes,
+  }) async {
+    await controller.updateConfiguration(
+      server: server,
+      routingProfile: routingProfile,
+      excludedRoutes: excludedRoutes,
+    );
+    _selectedServer = server;
+    _selectedRoutingProfile = routingProfile;
+    _excludedRoutes = excludedRoutes;
+  }
 
   Future<void> _deleteConfig({
     required VpnController controller,
   }) async {
-    await controller.stop();
     await controller.deleteConfiguration();
     _selectedServer = null;
     _selectedRoutingProfile = null;
@@ -115,12 +144,6 @@ class _VpnUpdateManagerState extends State<VpnUpdateManager> {
     required List<String> excludedRoutes,
     required VpnController controller,
   }) async {
-    await controller.updateConfiguration(
-      server: server,
-      routingProfile: routingProfile,
-      excludedRoutes: excludedRoutes,
-    );
-
     await controller.start(
       server: server,
       routingProfile: routingProfile,
@@ -130,11 +153,5 @@ class _VpnUpdateManagerState extends State<VpnUpdateManager> {
     _selectedServer = server;
     _selectedRoutingProfile = routingProfile;
     _excludedRoutes = excludedRoutes;
-  }
-
-  @override
-  void dispose() {
-    // Permanent removal of a tree stent
-    super.dispose();
   }
 }

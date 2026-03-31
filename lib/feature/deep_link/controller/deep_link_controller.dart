@@ -17,17 +17,19 @@ final class DeepLinkController extends BaseStateController<DeepLinkState> with S
     super.initialState = const DeepLinkState.initial(),
   }) : _repository = repository;
 
-  void onDeepLinkReceived(String deepLink) => handle(
+  void onDeepLinkReceived(String? deepLink) => handle(
     () async {
       setState(
-        const DeepLinkState.loading(
-          null,
+        DeepLinkState.loading(
+          state.parsedData,
         ),
       );
 
-      final parsedDeepLink = await _repository.parseDataFromLink(
-        deepLink: deepLink,
-      );
+      final parsedDeepLink = deepLink == null
+          ? null
+          : await _repository.parseDataFromLink(
+              deepLink: deepLink,
+            );
 
       setState(
         DeepLinkState.idle(parsedDeepLink),

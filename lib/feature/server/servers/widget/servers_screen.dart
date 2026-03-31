@@ -1,9 +1,15 @@
 import 'package:flutter/material.dart';
+import 'package:trusttunnel/data/model/server_data.dart';
 import 'package:trusttunnel/feature/server/servers/widget/scope/servers_scope.dart';
 import 'package:trusttunnel/feature/server/servers/widget/servers_screen_view.dart';
 
 class ServersScreen extends StatefulWidget {
-  const ServersScreen({super.key});
+  final ServerData? deepLinkData;
+
+  const ServersScreen({
+    super.key,
+    this.deepLinkData,
+  });
 
   @override
   State<ServersScreen> createState() => _ServersScreenState();
@@ -19,5 +25,7 @@ class _ServersScreenState extends State<ServersScreen> {
   }
 
   @override
-  Widget build(BuildContext context) => const ServersScreenView();
+  Widget build(BuildContext context) => ServersScreenView(
+    deepLinkData: widget.deepLinkData,
+  );
 }
