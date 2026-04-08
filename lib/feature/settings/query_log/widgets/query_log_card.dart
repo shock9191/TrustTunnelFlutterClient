@@ -12,23 +12,21 @@ class QueryLogCard extends StatelessWidget {
   });
 
   @override
-  Widget build(BuildContext context) => IntrinsicHeight(
-    child: Padding(
-      padding: const EdgeInsets.symmetric(vertical: 8, horizontal: 16),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Text(
-            _titleLine(context),
-            style: context.textTheme.bodySmall,
-          ),
-          const SizedBox(height: 3),
-          Text(
-            _ipAddressLine(),
-            style: context.textTheme.bodySmall,
-          ),
-        ],
-      ),
+  Widget build(BuildContext context) => Padding(
+    padding: const EdgeInsets.symmetric(vertical: 8, horizontal: 16),
+    child: Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(
+          _titleLine(context),
+          style: context.textTheme.bodySmall,
+        ),
+        const SizedBox(height: 3),
+        Text(
+          _ipAddressLine(),
+          style: context.textTheme.bodySmall,
+        ),
+      ],
     ),
   );
 

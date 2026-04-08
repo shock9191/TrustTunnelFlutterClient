@@ -5,14 +5,19 @@ import 'package:punycoder/punycoder.dart';
 import 'package:trusttunnel/common/error/model/enum/presentation_field_name.dart';
 import 'package:trusttunnel/common/error/model/presentation_field.dart';
 
-abstract class ValidationUtils {
+abstract final class ValidationUtils {
   static const plainRawRegex = r'^(?:25[0-5]|2[0-4]\d|1\d\d|[1-9]?\d)(?:\.(?:25[0-5]|2[0-4]\d|1\d\d|[1-9]?\d)){3}$';
 
-  static const firstLevelDomainRegex = r'^(?=.{2,63}$)[a-z0-9](?:[a-z0-9-]*[a-z0-9])?$';
+  static const firstLevelDomainRegex = r'^(?=.{1,63}$)[a-z0-9](?:[a-z0-9-]*[a-z0-9])?$';
 
   static const cidrRegex = r'^[^\/]+\/\d+$';
 
   static const domainRawRegex =
+      r'^(?:localhost|'
+      r'(?:[A-Za-z0-9](?:[A-Za-z0-9-]{0,61}[A-Za-z0-9])?\.)+'
+      r'(?:[A-Za-z]{2,63}|xn--[A-Za-z0-9-]{2,58}))\.?$';
+
+  static const domainWithAliasRawRegex =
       r'^(?:localhost|'
       r'(?:[A-Za-z0-9](?:[A-Za-z0-9-]{0,61}[A-Za-z0-9])?\.)+'
       r'(?:[A-Za-z]{2,63}|xn--[A-Za-z0-9-]{2,58}))'
@@ -31,14 +36,12 @@ abstract class ValidationUtils {
       r'(?:[A-Za-z]{2,63}|xn--[A-Za-z0-9-]{2,58}))'
       r'(?:/[^ \t\r\n]*)?$';
 
-  // DoQ (quic://host)
   static const quicRawRegex =
       r'^quic://'
       r'(?:localhost|'
       r'(?:[A-Za-z0-9](?:[A-Za-z0-9-]{0,61}[A-Za-z0-9])?\.)+'
       r'(?:[A-Za-z]{2,63}|xn--[A-Za-z0-9-]{2,58}))$';
 
-  // DoH over HTTP/3 (https://host[/…]#h3)
   static const h3RawRegex =
       r'^https://'
       r'(?:localhost|'
@@ -47,6 +50,13 @@ abstract class ValidationUtils {
       r'(?:/[^ \t\r\n]*)?#h3$';
 
   static const allowableStartRegex = r'^(tls:\/\/|https:\/\/|http:\/\/|quic:\/\/|h3:\/\/|sdns:\/\/|)';
+
+  static final RegExp _cidrRegExp = RegExp(cidrRegex);
+  static final RegExp _firstLevelDomainRegExp = RegExp(firstLevelDomainRegex);
+  static final RegExp _domainRegExp = RegExp(domainRawRegex);
+  static final RegExp _domainWithAliasRegExp = RegExp(domainWithAliasRawRegex);
+  static final RegExp _allowableStartRegExp = RegExp(allowableStartRegex);
+  static final PunycodeCodec _punycodeCodec = const PunycodeCodec();
 
   static String? getErrorString(
     BuildContext context,
@@ -73,10 +83,11 @@ static bool validateIpAddress(String ipAddress, {bool allowPort = true}) {
   }
 
   static bool validateCidr(String cidr) {
-    if (!RegExp(cidrRegex).hasMatch(cidr)) return false;
+    if (!_cidrRegExp.hasMatch(cidr)) {
+      return false;
+    }
 
     final split = cidr.split('/');
-
     final ipPart = split.first;
     final postfixPart = split.elementAtOrNull(1) ?? '';
     final postfix = int.tryParse(postfixPart);
@@ -85,41 +96,160 @@ static bool validateIpAddress(String ipAddress, {bool allowPort = true}) {
       return false;
     }
 
-    final isIpv6 = ipPart.contains(':');
-
-    if (isIpv6) {
-      return postfix >= 0 && postfix <= 128;
+    if (!_isIp(ipPart)) {
+      return false;
     }
 
-    return postfix >= 0 && postfix <= 32;
+    return _isIpv6(ipPart) ? postfix >= 0 && postfix <= 128 : postfix >= 0 && postfix <= 32;
   }
 
-  static String? tryParseDomain(String domain, {bool allowFirstLevel = false}) {
-    final wildCard = '*.';
+  static String? tryParseDomain(
+    String domain, {
+    bool allowFirstLevel = false,
+    bool allowPort = false,
+    bool acceptWildCard = true,
+  }) => _parseDomain(
+    domain,
+    allowFirstLevel: allowFirstLevel,
+    allowPort: allowPort,
+    acceptWildCard: acceptWildCard,
+    acceptLeadingDot: acceptWildCard,
+    acceptAlias: true,
+  );
 
-    final bool hasWildCard = domain.startsWith(wildCard);
-    final bool domainStartWithDot = domain.startsWith('.');
-    
-    if (hasWildCard) {
-      domain = domain.replaceFirst(wildCard, '');
-    } else if (domainStartWithDot) {
-      domain = domain.substring(1);
+  static bool tryParseFirstLevelDomain(String domain) => _firstLevelDomainRegExp.hasMatch(domain);
+
+  static _HostPort? _splitHostAndPort(String input) {
+    final value = input.trim();
+    if (value.isEmpty) {
+      return null;
     }
 
-    var encodedDomain = const PunycodeCodec().encode(domain);
+    if (value.startsWith('[')) {
+      final closingIndex = value.indexOf(']');
+      if (closingIndex == -1) {
+        return null;
+      }
 
-    bool valid = RegExp(domainRawRegex).hasMatch(encodedDomain);
+      final host = value.substring(1, closingIndex);
+      final rest = value.substring(closingIndex + 1);
 
-    if (allowFirstLevel) {
-      valid |= tryParseFirstLevelDomain(encodedDomain);
+      if (host.isEmpty) {
+        return null;
+      }
+
+      if (rest.isEmpty) {
+        return _HostPort(host: host);
+      }
+
+      if (!rest.startsWith(':')) {
+        return null;
+      }
+
+      final port = rest.substring(1);
+      if (port.isEmpty) {
+        return null;
+      }
+
+      return _HostPort(host: host, port: port);
     }
 
-    if (hasWildCard) {
-      encodedDomain = '$wildCard$encodedDomain';
+    final colonCount = ':'.allMatches(value).length;
+
+    if (colonCount == 0) {
+      return _HostPort(host: value);
     }
 
-    return valid ? encodedDomain : null;
+    if (colonCount == 1) {
+      final index = value.lastIndexOf(':');
+      final host = value.substring(0, index);
+      final port = value.substring(index + 1);
+
+      if (host.isEmpty || port.isEmpty) {
+        return null;
+      }
+
+      return _HostPort(host: host, port: port);
+    }
+
+    return _HostPort(host: value);
   }
 
-  static bool tryParseFirstLevelDomain(String domain) => RegExp(firstLevelDomainRegex).hasMatch(domain);
+  static bool _isValidPort(String? port) {
+    if (port == null) {
+      return true;
+    }
+
+    final parsed = int.tryParse(port);
+
+    return parsed != null && parsed >= 1 && parsed <= 65535;
+  }
+
+  static bool _isIp(String value) => InternetAddress.tryParse(value) != null;
+
+  static bool _isIpv6(String value) => InternetAddress.tryParse(value)?.type == InternetAddressType.IPv6;
+
+  static bool _looksLikeSupportedDnsUri(String value) => _allowableStartRegExp.hasMatch(value);
+
+  static String? _parseDomain(
+    String domain, {
+    required bool allowFirstLevel,
+    required bool allowPort,
+    required bool acceptWildCard,
+    required bool acceptLeadingDot,
+    required bool acceptAlias,
+  }) {
+    var value = domain.trim();
+    if (value.isEmpty) {
+      return null;
+    }
+
+    final parsed = _splitHostAndPort(value);
+    if (parsed == null) {
+      return null;
+    }
+
+    if (parsed.port != null) {
+      if (!allowPort || !_isValidPort(parsed.port)) {
+        return null;
+      }
+      value = parsed.host;
+    }
+
+    var hasWildcard = false;
+    const wildcard = '*.';
+
+    if (acceptWildCard && value.startsWith(wildcard)) {
+      hasWildcard = true;
+      value = value.substring(wildcard.length);
+    } else if (acceptLeadingDot && value.startsWith('.')) {
+      value = value.substring(1);
+    }
+
+    if (value.isEmpty) {
+      return null;
+    }
+
+    final encodedDomain = _punycodeCodec.encode(value);
+
+    final isValidDomain = (acceptAlias ? _domainWithAliasRegExp : _domainRegExp).hasMatch(encodedDomain);
+
+    final isValidFirstLevel = allowFirstLevel && tryParseFirstLevelDomain(encodedDomain);
+
+    if (!isValidDomain && !isValidFirstLevel) {
+      return null;
+    }
+
+    return hasWildcard ? '$wildcard$encodedDomain' : encodedDomain;
+  }
+}
+
+final class _HostPort {
+  final String host;
+  final String? port;
+
+  const _HostPort({
+    required this.host,
+    this.port,
+  });
 }
