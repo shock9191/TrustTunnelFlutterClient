@@ -337,4 +337,58 @@ final class _HostPort {
     required this.host,
     this.port,
   });
+
+  static bool validateServerAddress(String value, {bool allowPort = true}) {
+  final parsed = _splitHostAndPort(value.trim());
+  if (parsed == null) {
+    return false;
+  }
+
+  if (parsed.port != null && !allowPort) {
+    return false;
+  }
+
+  if (!_isValidPort(parsed.port)) {
+    return false;
+  }
+
+  return _isIp(parsed.host) || validateServerHost(parsed.host);
+}
+
+static String? parseServerHost(String host) => _parseDomain(
+  host.trim(),
+  allowFirstLevel: true,
+  allowPort: false,
+  acceptWildCard: false,
+  acceptLeadingDot: false,
+  acceptAlias: false,
+);
+
+static bool validateServerHost(String host) => parseServerHost(host) != null;
+
+static bool validateDnsServer(String value) {
+  final rawValue = value.trim();
+  if (rawValue.isEmpty) {
+    return false;
+  }
+
+  if (_looksLikeSupportedDnsUri(rawValue)) {
+    final uri = Uri.tryParse(rawValue);
+    if (uri == null) {
+      return false;
+    }
+
+    if (uri.host.isEmpty) {
+      return false;
+    }
+
+    if (uri.hasPort && !_isValidPort(uri.port.toString())) {
+      return false;
+    }
+
+    return _isIp(uri.host) || tryParseDomain(uri.host) != null;
+  }
+
+  return validateServerAddress(rawValue);
+}
 }
