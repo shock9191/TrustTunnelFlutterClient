@@ -53,10 +53,13 @@ class _ServersCardState extends State<ServersCard> {
       trailing: ServersCardConnectionButton(
         vpnManagerState: vpnManagerState,
         onPressed: () {
-          if (vpnManagerState != VpnState.disconnected && widget.server.id == _pickedServer?.id) {
-            _disconnectFromVpn(context);
+          if (widget.server.id == _pickedServer?.id) {
+            if (vpnManagerState != VpnState.disconnected) {
+              _disconnectFromVpn(context);
+            } else {
+              _connectToVpn(context, widget.server);
+            }
           } else {
-            _connectToVpn(context, widget.server);
             _changeServer(context, widget.server.id);
           }
         },
