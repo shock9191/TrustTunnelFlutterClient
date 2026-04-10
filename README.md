@@ -212,13 +212,6 @@ upstream_fallback_protocol = ""
 anti_dpi = false
 ```
 
-> [!WARNING]
-> TrustTunnel Flutter Client **doesn't support** self-signed certificates **yet**.
-> If you want to use the TrustTunnel Flutter Client, you should have a valid
-> certificate issued by a publicly trusted Certificate Authority (CA) associated
-> with a registered domain for the IP address of the endpoint. Otherwise,
-> the TrustTunnel Flutter Client will be unable to connect to the endpoint.
-
 ### Server Configuration
 After generating the configuration on the server, open the **TrustTunnel Flutter Client** and navigate to the **Servers** section. From there, open the **Add Server / Edit Server** screen.
 
