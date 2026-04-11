@@ -29,20 +29,29 @@ jobs:
 
     - name: Prepare Android Configuration
       run: |
+        # 1. Create local.properties (Essential for Flutter SDK path)
         echo "sdk.dir=$ANDROID_SDK_ROOT" > android/local.properties
-        echo "storePassword=dummy\nkeyPassword=dummy\nkeyAlias=dummy\nstoreFile=dummy.jks" > android/key.properties
-        touch android/app/dummy.jks
+        echo "flutter.sdk=$FLUTTER_ROOT" >> android/local.properties
+        
+        # 2. Create key.properties (Fixes 'null to File' crash on line 71)
+        # Even for debug builds, many projects parse this file.
+        cat <<EOF > android/key.properties
+        storePassword=password123
+        keyPassword=password123
+        keyAlias=debugAlias
+        storeFile=debug.jks
+        EOF
+        
+        # 3. Create a dummy physical keystore file
+        touch android/app/debug.jks
 
     - name: Install Dependencies
       run: flutter pub get
 
-    # CRITICAL FIX: Run code generation for Drift, VPN Plugin, and Localization
-    - name: Run Source Code Generation
+    - name: Run Source Generation
       run: |
-        # Generate localization files (AppLocalizations)
+        # Generates localization and database files required for the build
         flutter pub run intl_utils:generate
-        
-        # Generate Database and Plugin files (app_database.g.dart, etc.)
         flutter pub run build_runner build --delete-conflicting-outputs
 
     - name: Initialize Project (make init)
@@ -60,5 +69,5 @@ jobs:
     - name: Upload APK
       uses: actions/upload-artifact@v4
       with:
-        name: trust-tunnel-fixed
+        name: trust-tunnel-debug-apk
         path: build/app/outputs/flutter-apk/*.apk
