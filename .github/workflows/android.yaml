@@ -2,7 +2,7 @@ name: Flutter Android Build
 
 on:
   push:
-    branches: [ "master", "custom-samsung-routine", "custom-allow-text-address" ]
+    branches: [ "master", "custom-samsung-routine" ]
   pull_request:
     branches: [ "master" ]
 
@@ -18,44 +18,39 @@ jobs:
       with:
         java-version: '17'
         distribution: 'temurin'
+        # OPTIMIZATION: Cache Gradle dependencies
+        cache: 'gradle'
 
     - name: Set up Flutter
       uses: subosito/flutter-action@v2
       with:
         flutter-version: '3.38.3'
         channel: 'stable'
+        # OPTIMIZATION: Built-in Flutter caching
         cache: true
 
-    # This step fixes the "null to File" error by providing the files Gradle is looking for
-    - name: Prepare Android Configuration
+    - name: Prepare Configuration
       run: |
-        # 1. Create local.properties
         echo "sdk.dir=$ANDROID_SDK_ROOT" > android/local.properties
-        
-        # 2. Create a dummy key.properties in case line 71 looks for it
-        echo "storePassword=dummy_password" > android/key.properties
-        echo "keyPassword=dummy_password" >> android/key.properties
-        echo "keyAlias=dummy_alias" >> android/key.properties
-        echo "storeFile=dummy.jks" >> android/key.properties
-        
-        # 3. Create a physical dummy file so the 'File' conversion doesn't fail on a missing path
-        touch android/app/dummy.jks
+        # Use dummy keys for debug builds to prevent line 71 crash
+        touch android/key.properties
+        echo "storePassword=dummy\nkeyPassword=dummy\nkeyAlias=dummy\nstoreFile=dummy.jks" > android/key.properties
 
-    - name: Initialize Project (make init)
+    - name: Quality Gates
       run: |
-        make init
-      env:
-        GPR_KEY: ${{ secrets.GPR_KEY }}
+        flutter pub get
+        flutter analyze # Catches code errors before the long build starts
+        # flutter test  # Recommended if you have unit tests
 
     - name: Build APK
       run: |
-        # We use assembleDebug directly via gradle or flutter build apk --debug
-        flutter build apk --debug --dart-define=GPR_KEY=${{ secrets.GPR_KEY }}
-      env:
-        GPR_KEY: ${{ secrets.GPR_KEY }}
+        # OPTIMIZATION: Use --split-per-abi for smaller, device-specific APKs 
+        # or build an App Bundle (.aab) if uploading to Play Store
+        flutter build apk --debug --split-per-abi \
+          --dart-define=GPR_KEY=${{ secrets.GPR_KEY }}
 
-    - name: Upload APK
+    - name: Upload Artifacts
       uses: actions/upload-artifact@v4
       with:
-        name: trust-tunnel-fixed
+        name: trust-tunnel-apks
         path: build/app/outputs/flutter-apk/*.apk
