@@ -9,6 +9,10 @@ on:
 jobs:
   build:
     runs-on: ubuntu-latest
+    # Setting the env here makes it available to ALL steps automatically
+    env:
+      GPR_KEY: ${{ secrets.GPR_KEY }}
+      gpr_key: ${{ secrets.GPR_KEY }}
 
     steps:
     - uses: actions/checkout@v4
@@ -29,20 +33,17 @@ jobs:
 
     - name: Prepare Android Configuration
       run: |
-        # 1. Create local.properties (Essential for Flutter SDK path)
+        # Create essential properties files to prevent Gradle null pointer errors
         echo "sdk.dir=$ANDROID_SDK_ROOT" > android/local.properties
         echo "flutter.sdk=$FLUTTER_ROOT" >> android/local.properties
         
-        # 2. Create key.properties (Fixes 'null to File' crash on line 71)
-        # Even for debug builds, many projects parse this file.
+        # Create a dummy key.properties in case the app-level build.gradle needs it
         cat <<EOF > android/key.properties
         storePassword=password123
         keyPassword=password123
         keyAlias=debugAlias
         storeFile=debug.jks
         EOF
-        
-        # 3. Create a dummy physical keystore file
         touch android/app/debug.jks
 
     - name: Install Dependencies
@@ -50,24 +51,19 @@ jobs:
 
     - name: Run Source Generation
       run: |
-        # Generates localization and database files required for the build
         flutter pub run intl_utils:generate
         flutter pub run build_runner build --delete-conflicting-outputs
 
     - name: Initialize Project (make init)
       run: make init
-      env:
-        GPR_KEY: ${{ secrets.GPR_KEY }}
 
     - name: Build APK
       run: |
-        flutter build apk --debug \
-          --dart-define=GPR_KEY=${{ secrets.GPR_KEY }}
-      env:
-        GPR_KEY: ${{ secrets.GPR_KEY }}
+        # Passing GPR_KEY via dart-define as well just in case the code needs it
+        flutter build apk --debug --dart-define=GPR_KEY=${{ secrets.GPR_KEY }}
 
     - name: Upload APK
       uses: actions/upload-artifact@v4
       with:
-        name: trust-tunnel-debug-apk
+        name: trust-tunnel-fixed
         path: build/app/outputs/flutter-apk/*.apk
