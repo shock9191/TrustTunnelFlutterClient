@@ -28,16 +28,16 @@ jobs:
 
     - name: Initialize Project (make init)
       run: |
-        # This single command runs whatever the original author configured
-        # to fetch dependencies and run code generators for plugins/database
+        # Ensure dependencies are fully resolved before building
         make init
       env:
         GPR_KEY: ${{ secrets.GPR_KEY }}
 
     - name: Build APK
       run: |
-        export GPR_KEY=${{ secrets.GPR_KEY }}
-        flutter build apk --debug --no-shrink \
+        # Use 'flutter build apk --debug' to generate the debug variant
+        # Removed '--no-shrink' as it is default in debug and can cause Gradle path issues
+        flutter build apk --debug \
           --dart-define=GPR_KEY=${{ secrets.GPR_KEY }}
       env:
         GPR_KEY: ${{ secrets.GPR_KEY }}
@@ -46,5 +46,6 @@ jobs:
       uses: actions/upload-artifact@v4
       with:
         name: trust-tunnel-fixed
-        path: build/app/outputs/flutter-apk/app-debugv1.1.apk
-        #atest
+        # Using a wildcard pattern ensures the upload succeeds even if 
+        # the filename contains version numbers (like v1.1)
+        path: build/app/outputs/flutter-apk/*.apk
