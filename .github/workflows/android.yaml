@@ -26,19 +26,24 @@ jobs:
         channel: 'stable'
         cache: true
 
+    # FIX: Create a dummy key.properties to prevent Gradle from crashing at line 71
+    - name: Create dummy key.properties
+      run: |
+        echo "storePassword=password" > android/key.properties
+        echo "keyPassword=password" >> android/key.properties
+        echo "keyAlias=upload" >> android/key.properties
+        echo "storeFile=key.jks" >> android/key.properties
+        touch android/app/key.jks
+
     - name: Initialize Project (make init)
       run: |
-        # Ensure dependencies are fully resolved before building
         make init
       env:
         GPR_KEY: ${{ secrets.GPR_KEY }}
 
     - name: Build APK
       run: |
-        # Use 'flutter build apk --debug' to generate the debug variant
-        # Removed '--no-shrink' as it is default in debug and can cause Gradle path issues
-        flutter build apk --debug \
-          --dart-define=GPR_KEY=${{ secrets.GPR_KEY }}
+        flutter build apk --debug --dart-define=GPR_KEY=${{ secrets.GPR_KEY }}
       env:
         GPR_KEY: ${{ secrets.GPR_KEY }}
 
@@ -46,6 +51,4 @@ jobs:
       uses: actions/upload-artifact@v4
       with:
         name: trust-tunnel-fixed
-        # Using a wildcard pattern ensures the upload succeeds even if 
-        # the filename contains version numbers (like v1.1)
         path: build/app/outputs/flutter-apk/*.apk
