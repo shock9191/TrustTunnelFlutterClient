@@ -5,7 +5,6 @@ import 'package:trusttunnel/data/model/server_data.dart';
 import 'package:trusttunnel/feature/deep_link/deep_link_scope.dart';
 import 'package:trusttunnel/feature/navigation/widgets/custom_navigation_rail.dart';
 import 'package:trusttunnel/feature/routing/routing/widgets/routing_screen.dart';
-import 'package:trusttunnel/feature/server/server_details/widgets/server_details_popup.dart';
 import 'package:trusttunnel/feature/server/servers/widget/servers_screen.dart';
 import 'package:trusttunnel/feature/settings/settings/settings_screen.dart';
 
@@ -30,12 +29,7 @@ class _NavigationScreenState extends State<NavigationScreen> {
       _deepLinkData = fetchedDeepLink;
       if (_deepLinkData != null) {
         _navigatorKey.currentState?.popUntil((f) => f.isFirst);
-        _selectedTabNotifier.value = 0;
-        _navigatorKey.currentContext?.push(
-          ServerDetailsPopUp.preloaded(
-            preloadedData: fetchedDeepLink,
-          ),
-        );
+        _onDestinationSelected(0, deepLinkData: _deepLinkData);
       }
     }
   }
@@ -48,6 +42,8 @@ class _NavigationScreenState extends State<NavigationScreen> {
       bottom: false,
       left: false,
       child: Scaffold(
+        primary: false,
+
         backgroundColor: context.colors.backgroundSystem,
         body: SafeArea(
           top: false,
@@ -86,8 +82,15 @@ class _NavigationScreenState extends State<NavigationScreen> {
     ),
   );
 
-  Widget getScreenByIndex(int selectedIndex) => switch (selectedIndex) {
-    0 => const ServersScreen(),
+// TODO: Make navigator works with deeplink in right way
+// Konstantin Gorynin <k.gorynin@adguard.com>, 31 March 2026
+  Widget getScreenByIndex(
+    int selectedIndex, {
+    ServerData? deepLinkData,
+  }) => switch (selectedIndex) {
+    0 => ServersScreen(
+      deepLinkData: deepLinkData,
+    ),
     1 => const RoutingScreen(),
     2 => const SettingsScreen(),
     _ => throw Exception('Invalid index: $selectedIndex'),
@@ -107,12 +110,15 @@ class _NavigationScreenState extends State<NavigationScreen> {
     ),
   );
 
-  void _onDestinationSelected(int selectedIndex) {
-    if (_selectedTabNotifier.value != selectedIndex) {
+  void _onDestinationSelected(int selectedIndex, {ServerData? deepLinkData}) {
+    if (_selectedTabNotifier.value != selectedIndex || deepLinkData != null) {
       _selectedTabNotifier.value = selectedIndex;
       _navigatorKey.currentState!.pushAndRemoveUntil(
         PageRouteBuilder(
-          pageBuilder: (context, animation, secondaryAnimation) => getScreenByIndex(selectedIndex),
+          pageBuilder: (context, animation, secondaryAnimation) => getScreenByIndex(
+            selectedIndex,
+            deepLinkData: deepLinkData,
+          ),
           transitionDuration: Duration.zero,
           reverseTransitionDuration: Duration.zero,
         ),

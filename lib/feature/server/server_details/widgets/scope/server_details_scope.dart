@@ -134,6 +134,35 @@ class _InheritedServerDetailsScope extends InheritedModel<ServerDetailsScopeAspe
     ServerDetailsScopeAspect? aspect,
   }) => _productsScope(context, listen: listen, aspect: aspect) ?? _notFoundInheritedWidgetOfExactType();
 
+  @override
+  bool updateShouldNotify(_InheritedServerDetailsScope oldWidget) => _state != oldWidget._state;
+
+  @override
+  bool updateShouldNotifyDependent(
+    covariant _InheritedServerDetailsScope oldWidget,
+    Set<ServerDetailsScopeAspect> dependencies,
+  ) {
+    if (dependencies.isEmpty) return updateShouldNotify(oldWidget);
+
+    bool hasAnyChanges = false;
+
+    for (final aspect in dependencies) {
+      hasAnyChanges |= switch (aspect) {
+        ServerDetailsScopeAspect.loading => loading != oldWidget.loading,
+        ServerDetailsScopeAspect.exception => error != oldWidget.error,
+        ServerDetailsScopeAspect.fieldErrors => !listEquals(fieldErrors, oldWidget.fieldErrors),
+        ServerDetailsScopeAspect.data =>
+          _state.data != oldWidget._state.data || !listEquals(routingProfiles, oldWidget.routingProfiles),
+      };
+
+      if (hasAnyChanges) {
+        return hasAnyChanges;
+      }
+    }
+
+    return false;
+  }
+
   static _InheritedServerDetailsScope? _productsScope(
     BuildContext context, {
     bool listen = true,
@@ -169,33 +198,4 @@ class _InheritedServerDetailsScope extends InheritedModel<ServerDetailsScopeAspe
 
   @override
   bool get hasChanges => _state.data != _state.initialData;
-
-  @override
-  bool updateShouldNotify(_InheritedServerDetailsScope oldWidget) => _state != oldWidget._state;
-
-  @override
-  bool updateShouldNotifyDependent(
-    covariant _InheritedServerDetailsScope oldWidget,
-    Set<ServerDetailsScopeAspect> dependencies,
-  ) {
-    if (dependencies.isEmpty) return updateShouldNotify(oldWidget);
-
-    bool hasAnyChanges = false;
-
-    for (final aspect in dependencies) {
-      hasAnyChanges |= switch (aspect) {
-        ServerDetailsScopeAspect.loading => loading != oldWidget.loading,
-        ServerDetailsScopeAspect.exception => error != oldWidget.error,
-        ServerDetailsScopeAspect.fieldErrors => !listEquals(fieldErrors, oldWidget.fieldErrors),
-        ServerDetailsScopeAspect.data =>
-          _state.data != oldWidget._state.data || !listEquals(routingProfiles, oldWidget.routingProfiles),
-      };
-
-      if (hasAnyChanges) {
-        return hasAnyChanges;
-      }
-    }
-
-    return false;
-  }
 }

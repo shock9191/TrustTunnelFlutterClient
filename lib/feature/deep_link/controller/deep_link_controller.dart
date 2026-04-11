@@ -2,8 +2,11 @@ import 'package:trusttunnel/common/controller/concurrency/sequential_controller_
 import 'package:trusttunnel/common/controller/controller/state_controller.dart';
 import 'package:trusttunnel/common/error/error_utils.dart';
 import 'package:trusttunnel/common/error/model/presentation_error.dart';
+import 'package:trusttunnel/data/model/server_data.dart';
 import 'package:trusttunnel/data/repository/deep_link_repository.dart';
 import 'package:trusttunnel/feature/deep_link/controller/deep_link_state.dart';
+
+const _deepLinkScheme = 'tt';
 
 /// {@template products_controller}
 /// Controller for managing products and purchase operations.
@@ -17,17 +20,25 @@ final class DeepLinkController extends BaseStateController<DeepLinkState> with S
     super.initialState = const DeepLinkState.initial(),
   }) : _repository = repository;
 
-  void onDeepLinkReceived(String deepLink) => handle(
+  void onDeepLinkReceived(Uri? deepLink) => handle(
     () async {
       setState(
-        const DeepLinkState.loading(
-          null,
+        DeepLinkState.loading(
+          state.parsedData,
         ),
       );
 
-      final parsedDeepLink = await _repository.parseDataFromLink(
-        deepLink: deepLink,
-      );
+      ServerData? parsedDeepLink;
+
+      if (deepLink?.hasQuery ?? false) {
+        parsedDeepLink = await _repository.parseDataFromLink(
+          deepLink: Uri(
+            scheme: _deepLinkScheme,
+            host: '',
+            query: deepLink!.query,
+          ).toString(),
+        );
+      }
 
       setState(
         DeepLinkState.idle(parsedDeepLink),
