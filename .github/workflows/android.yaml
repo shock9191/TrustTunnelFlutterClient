@@ -9,10 +9,10 @@ on:
 jobs:
   build:
     runs-on: ubuntu-latest
-    # Setting the env here makes it available to ALL steps automatically
     env:
+      # GitHub Actions treats these as case-insensitive; only use one.
+      # Your Gradle script will find this as "GPR_KEY".
       GPR_KEY: ${{ secrets.GPR_KEY }}
-      gpr_key: ${{ secrets.GPR_KEY }}
 
     steps:
     - uses: actions/checkout@v4
@@ -33,11 +33,9 @@ jobs:
 
     - name: Prepare Android Configuration
       run: |
-        # Create essential properties files to prevent Gradle null pointer errors
         echo "sdk.dir=$ANDROID_SDK_ROOT" > android/local.properties
         echo "flutter.sdk=$FLUTTER_ROOT" >> android/local.properties
         
-        # Create a dummy key.properties in case the app-level build.gradle needs it
         cat <<EOF > android/key.properties
         storePassword=password123
         keyPassword=password123
@@ -59,7 +57,6 @@ jobs:
 
     - name: Build APK
       run: |
-        # Passing GPR_KEY via dart-define as well just in case the code needs it
         flutter build apk --debug --dart-define=GPR_KEY=${{ secrets.GPR_KEY }}
 
     - name: Upload APK
