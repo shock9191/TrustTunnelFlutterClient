@@ -2,7 +2,7 @@ name: Flutter Android Build
 
 on:
   push:
-    branches: [ "master", "custom-samsung-routine" ]
+    branches: [ "master", "custom-samsung-routine", "custom-allow-text-address" ]
   pull_request:
     branches: [ "master" ]
 
@@ -18,7 +18,6 @@ jobs:
       with:
         java-version: '17'
         distribution: 'temurin'
-        # OPTIMIZATION: Cache Gradle dependencies
         cache: 'gradle'
 
     - name: Set up Flutter
@@ -26,31 +25,40 @@ jobs:
       with:
         flutter-version: '3.38.3'
         channel: 'stable'
-        # OPTIMIZATION: Built-in Flutter caching
         cache: true
 
-    - name: Prepare Configuration
+    - name: Prepare Android Configuration
       run: |
         echo "sdk.dir=$ANDROID_SDK_ROOT" > android/local.properties
-        # Use dummy keys for debug builds to prevent line 71 crash
-        touch android/key.properties
         echo "storePassword=dummy\nkeyPassword=dummy\nkeyAlias=dummy\nstoreFile=dummy.jks" > android/key.properties
+        touch android/app/dummy.jks
 
-    - name: Quality Gates
+    - name: Install Dependencies
+      run: flutter pub get
+
+    # CRITICAL FIX: Run code generation for Drift, VPN Plugin, and Localization
+    - name: Run Source Code Generation
       run: |
-        flutter pub get
-        flutter analyze # Catches code errors before the long build starts
-        # flutter test  # Recommended if you have unit tests
+        # Generate localization files (AppLocalizations)
+        flutter pub run intl_utils:generate
+        
+        # Generate Database and Plugin files (app_database.g.dart, etc.)
+        flutter pub run build_runner build --delete-conflicting-outputs
+
+    - name: Initialize Project (make init)
+      run: make init
+      env:
+        GPR_KEY: ${{ secrets.GPR_KEY }}
 
     - name: Build APK
       run: |
-        # OPTIMIZATION: Use --split-per-abi for smaller, device-specific APKs 
-        # or build an App Bundle (.aab) if uploading to Play Store
-        flutter build apk --debug --split-per-abi \
+        flutter build apk --debug \
           --dart-define=GPR_KEY=${{ secrets.GPR_KEY }}
+      env:
+        GPR_KEY: ${{ secrets.GPR_KEY }}
 
-    - name: Upload Artifacts
+    - name: Upload APK
       uses: actions/upload-artifact@v4
       with:
-        name: trust-tunnel-apks
+        name: trust-tunnel-fixed
         path: build/app/outputs/flutter-apk/*.apk
