@@ -90,7 +90,7 @@ final class _IdleServerDetailsState extends ServerDetailsState {
 final class _InitialServerDetailsState extends _IdleServerDetailsState {
   const _InitialServerDetailsState({
     super.data = const ServerData.empty(routingProfileId: RoutingProfileUtils.defaultRoutingProfileId),
-    super.initialData = const ServerData.empty(),
+    super.initialData = const ServerData.empty(routingProfileId: RoutingProfileUtils.defaultRoutingProfileId),
   }) : super(
          fieldErrors: const [],
          routingProfiles: const [],

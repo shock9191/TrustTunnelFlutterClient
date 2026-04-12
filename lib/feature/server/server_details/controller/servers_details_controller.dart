@@ -46,11 +46,22 @@ final class ServerDetailsController extends BaseStateController<ServerDetailsSta
         );
 
         final profiles = await _routingRepository.getAllProfiles();
-
         if (_serverId == null) {
+          String serverName = state.data.name.trim();
+
+          if (serverName.isNotEmpty) {
+            final servers = await _repository.getAllServers();
+            serverName = _detailsService.fallbackDuplicateNames(
+              serverName,
+              servers.map((server) => server.serverData.name).toSet(),
+            );
+          }
+
           setState(
             ServerDetailsState.idle(
-              data: state.data,
+              data: state.data.copyWith(
+                name: serverName,
+              ),
               initialData: state.initialData,
               fieldErrors: state.fieldErrors,
               routingProfiles: profiles,
@@ -149,16 +160,16 @@ final class ServerDetailsController extends BaseStateController<ServerDetailsSta
         routingProfiles: state.routingProfiles,
         data: state.data.copyWith(
           name: serverName ?? state.data.name,
-          ipAddress: ipAddress ?? state.data.ipAddress,
-          domain: domain ?? state.data.domain,
-          username: username ?? state.data.username,
-          password: password ?? state.data.password,
+          ipAddress: (ipAddress ?? state.data.ipAddress).trim(),
+          domain: (domain ?? state.data.domain).trim(),
+          username: (username ?? state.data.username).trim(),
+          password: (password ?? state.data.password).trim(),
           vpnProtocol: protocol ?? state.data.vpnProtocol,
           routingProfileId: routingProfileId ?? state.data.routingProfileId,
-          dnsServers: dnsServers ?? state.data.dnsServers,
+          dnsServers: (dnsServers ?? state.data.dnsServers).map((e) => e.trim()).where((e) => e.isNotEmpty).toList(),
           ipv6: enableIpv6 ?? state.data.ipv6,
-          tlsPrefix: clientRandom,
-          customSni: customSni,
+          tlsPrefix: clientRandom == null ? null : ValueData(clientRandom.value?.trim()),
+          customSni: customSni == null ? null : ValueData(customSni.value?.trim()),
         ),
       ),
     );
@@ -168,7 +179,17 @@ final class ServerDetailsController extends BaseStateController<ServerDetailsSta
     () async {
       setState(
         ServerDetailsState.loading(
-          data: state.data,
+          data: state.data.copyWith(
+            name: state.data.name.trim(),
+            ipAddress: state.data.ipAddress.trim(),
+            domain: state.data.domain.trim(),
+            username: state.data.username.trim(),
+            password: state.data.password.trim(),
+            dnsServers: state.data.dnsServers.map((e) => e.trim()).where((e) => e.isNotEmpty).toList(),
+            ipv6: state.data.ipv6,
+            tlsPrefix: ValueData(state.data.tlsPrefix?.trim()),
+            customSni: ValueData(state.data.customSni?.trim()),
+          ),
           initialData: state.initialData,
           fieldErrors: state.fieldErrors,
           routingProfiles: state.routingProfiles,
@@ -228,6 +249,15 @@ final class ServerDetailsController extends BaseStateController<ServerDetailsSta
       );
 
       await _repository.removeServer(serverId: _serverId!);
+
+      setState(
+        ServerDetailsState.idle(
+          data: state.data,
+          initialData: state.initialData,
+          fieldErrors: state.fieldErrors,
+          routingProfiles: state.routingProfiles,
+        ),
+      );
 
       onDeleted(
         state.data.name,
