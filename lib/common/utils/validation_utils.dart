@@ -300,7 +300,20 @@ abstract final class ValidationUtils {
 
     return validateServerAddress(rawValue);
   }
-} // MERGE FIX: This bracket was placed too early!
+
+  // NEW METHOD: Added missing validateDnsStamp needed by server_details_service
+  static bool validateDnsStamp(String value) {
+    final normalized = value.trim();
+
+    if (!normalized.startsWith('sdns://')) {
+      return false;
+    }
+
+    final payload = normalized.substring('sdns://'.length);
+
+    return payload.isNotEmpty && RegExp(r'^[A-Za-z0-9_-]+={0,2}$').hasMatch(payload);
+  }
+} // End of ValidationUtils class
 
 final class _HostPort {
   final String host;
