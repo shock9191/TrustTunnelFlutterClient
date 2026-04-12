@@ -66,10 +66,13 @@ android {
 
     signingConfigs {
         release {
-            keyAlias = getSigningProp("signingConfigKeyAlias")
-            keyPassword = getSigningProp("signingConfigKeyPassword")
-            storeFile = rootProject.file(getSigningProp("signingConfigKeyStorePath"))
-            storePassword = getSigningProp("signingConfigKeyStorePassword")
+            def keystorePath = getSigningProp("signingConfigKeyStorePath")
+            if (keystorePath != null) {
+                storeFile = rootProject.file(keystorePath)
+                keyAlias = getSigningProp("signingConfigKeyAlias")
+                keyPassword = getSigningProp("signingConfigKeyPassword")
+                storePassword = getSigningProp("signingConfigKeyStorePassword")
+            }
         }
     }
 
