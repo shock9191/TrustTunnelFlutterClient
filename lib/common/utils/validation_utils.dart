@@ -10,7 +10,7 @@ abstract final class ValidationUtils {
 
   static const firstLevelDomainRegex = r'^(?=.{1,63}$)[a-z0-9](?:[a-z0-9-]*[a-z0-9])?$';
 
-  static const cidrRegex = r'^[^\/]+\/\d+$';
+  static const cidrRegex = r'^[^\\/]+\/\d+$';
 
   static const domainRawRegex =
       r'^(?:localhost|'
@@ -55,6 +55,7 @@ abstract final class ValidationUtils {
   static final RegExp _firstLevelDomainRegExp = RegExp(firstLevelDomainRegex);
   static final RegExp _domainRegExp = RegExp(domainRawRegex);
   static final RegExp _domainWithAliasRegExp = RegExp(domainWithAliasRawRegex);
+  static final RegExp _allowableStartRegExp = RegExp(allowableStartRegex);
   static final PunycodeCodec _punycodeCodec = const PunycodeCodec();
 
   static String? getErrorString(
@@ -63,8 +64,7 @@ abstract final class ValidationUtils {
     PresentationFieldName fieldName,
   ) => fieldErrors.where((element) => element.fieldName == fieldName).firstOrNull?.toLocalizedString(context);
 
-
-static bool validateIpAddress(String ipAddress, {bool allowPort = true}) {
+  static bool validateIpAddress(String ipAddress, {bool allowPort = true}) {
     // If it's not empty, we let the Save button work.
     if (ipAddress.isEmpty) return false;
 
@@ -239,7 +239,68 @@ static bool validateIpAddress(String ipAddress, {bool allowPort = true}) {
 
     return hasWildcard ? '$wildcard$encodedDomain' : encodedDomain;
   }
-}
+  
+  // MERGE FIX: Moved validateServerAddress back inside ValidationUtils
+  static bool validateServerAddress(String value, {bool allowPort = true}) {
+    final parsed = _splitHostAndPort(value.trim());
+    if (parsed == null) {
+      return false;
+    }
+
+    if (parsed.port != null && !allowPort) {
+      return false;
+    }
+
+    if (!_isValidPort(parsed.port)) {
+      return false;
+    }
+
+    return _isIp(parsed.host) || validateServerHost(parsed.host);
+  }
+
+  // MERGE FIX: Moved parseServerHost back inside ValidationUtils
+  static String? parseServerHost(String host) => _parseDomain(
+    host.trim(),
+    allowFirstLevel: true,
+    allowPort: false,
+    acceptWildCard: false,
+    acceptLeadingDot: false,
+    acceptAlias: false,
+  );
+
+  // MERGE FIX: Moved validateServerHost back inside ValidationUtils
+  static bool validateServerHost(String host) => parseServerHost(host) != null;
+  
+  // MERGE FIX: Restored missing _looksLikeSupportedDnsUri logic
+  static bool _looksLikeSupportedDnsUri(String value) => _allowableStartRegExp.hasMatch(value);
+
+  // MERGE FIX: Moved validateDnsServer back inside ValidationUtils
+  static bool validateDnsServer(String value) {
+    final rawValue = value.trim();
+    if (rawValue.isEmpty) {
+      return false;
+    }
+
+    if (_looksLikeSupportedDnsUri(rawValue)) {
+      final uri = Uri.tryParse(rawValue);
+      if (uri == null) {
+        return false;
+      }
+
+      if (uri.host.isEmpty) {
+        return false;
+      }
+
+      if (uri.hasPort && !_isValidPort(uri.port.toString())) {
+        return false;
+      }
+
+      return _isIp(uri.host) || tryParseDomain(uri.host) != null;
+    }
+
+    return validateServerAddress(rawValue);
+  }
+} // MERGE FIX: This bracket was placed too early!
 
 final class _HostPort {
   final String host;
@@ -249,58 +310,4 @@ final class _HostPort {
     required this.host,
     this.port,
   });
-
-  static bool validateServerAddress(String value, {bool allowPort = true}) {
-  final parsed = _splitHostAndPort(value.trim());
-  if (parsed == null) {
-    return false;
-  }
-
-  if (parsed.port != null && !allowPort) {
-    return false;
-  }
-
-  if (!_isValidPort(parsed.port)) {
-    return false;
-  }
-
-  return _isIp(parsed.host) || validateServerHost(parsed.host);
-}
-
-static String? parseServerHost(String host) => _parseDomain(
-  host.trim(),
-  allowFirstLevel: true,
-  allowPort: false,
-  acceptWildCard: false,
-  acceptLeadingDot: false,
-  acceptAlias: false,
-);
-
-static bool validateServerHost(String host) => parseServerHost(host) != null;
-
-static bool validateDnsServer(String value) {
-  final rawValue = value.trim();
-  if (rawValue.isEmpty) {
-    return false;
-  }
-
-  if (_looksLikeSupportedDnsUri(rawValue)) {
-    final uri = Uri.tryParse(rawValue);
-    if (uri == null) {
-      return false;
-    }
-
-    if (uri.host.isEmpty) {
-      return false;
-    }
-
-    if (uri.hasPort && !_isValidPort(uri.port.toString())) {
-      return false;
-    }
-
-    return _isIp(uri.host) || tryParseDomain(uri.host) != null;
-  }
-
-  return validateServerAddress(rawValue);
-}
 }
