@@ -63,94 +63,23 @@ abstract final class ValidationUtils {
     PresentationFieldName fieldName,
   ) => fieldErrors.where((element) => element.fieldName == fieldName).firstOrNull?.toLocalizedString(context);
 
-  static bool validateIpAddress(String ipAddress, {bool allowPort = true}) {
-    final parsed = _splitHostAndPort(ipAddress.trim());
-    if (parsed == null) {
-      return false;
+
+static bool validateIpAddress(String ipAddress, {bool allowPort = true}) {
+    // If it's not empty, we let the Save button work.
+    if (ipAddress.isEmpty) return false;
+
+    // Optional: Keep basic port check if you want to prevent obvious typos
+    final parts = ipAddress.split(':');
+    if (ipAddress.contains(':')) {
+      if (!allowPort) return false;
+      final portString = parts.last.replaceAll(']', '');
+      final port = int.tryParse(portString);
+      if (port == null || port < 1 || port > 65535) return false;
     }
 
-    if (parsed.port != null && !allowPort) {
-      return false;
-    }
-
-    if (!_isValidPort(parsed.port)) {
-      return false;
-    }
-
-    return _isIp(parsed.host);
+    // This allows both IPs and Hostnames like ddnshome.dsylxeic.uk
+    return true; 
   }
-
-  static bool validateDnsStamp(String value) {
-    final normalized = value.trim();
-
-    if (!normalized.startsWith('sdns://')) {
-      return false;
-    }
-
-    final payload = normalized.substring('sdns://'.length);
-
-    return payload.isNotEmpty && RegExp(r'^[A-Za-z0-9_-]+={0,2}$').hasMatch(payload);
-  }
-
-  static bool validateServerAddress(String value, {bool allowPort = true}) {
-    final parsed = _splitHostAndPort(value.trim());
-    if (parsed == null) {
-      return false;
-    }
-
-    if (parsed.port != null && !allowPort) {
-      return false;
-    }
-
-    if (!_isValidPort(parsed.port)) {
-      return false;
-    }
-
-    return _isIp(parsed.host) || validateServerHost(parsed.host);
-  }
-
-  static String normalizeServerAddress(
-    String value, {
-    int defaultPort = 443,
-  }) {
-    final parsed = _splitHostAndPort(value.trim());
-    if (parsed == null) {
-      throw const FormatException('Invalid server address');
-    }
-
-    if (!_isValidPort(parsed.port)) {
-      throw const FormatException('Invalid port');
-    }
-
-    final host = parsed.host.trim();
-    if (!(_isIp(host) || validateServerHost(host))) {
-      throw const FormatException('Invalid host');
-    }
-
-    final port = parsed.port ?? defaultPort.toString();
-
-    if (_isIpv6(host)) {
-      return '[$host]:$port';
-    }
-
-    final encodedDomain = parseServerHost(host);
-    if (encodedDomain != null) {
-      return '$encodedDomain:$port';
-    }
-
-    return '$host:$port';
-  }
-
-  static bool validateServerHost(String host) => parseServerHost(host) != null;
-
-  static String? parseServerHost(String host) => _parseDomain(
-    host.trim(),
-    allowFirstLevel: true,
-    allowPort: false,
-    acceptWildCard: false,
-    acceptLeadingDot: false,
-    acceptAlias: false,
-  );
 
   static bool validateCidr(String cidr) {
     if (!_cidrRegExp.hasMatch(cidr)) {
