@@ -10,8 +10,6 @@ jobs:
   build:
     runs-on: ubuntu-latest
     env:
-      # GitHub Actions treats these as case-insensitive; only use one.
-      # Your Gradle script will find this as "GPR_KEY".
       GPR_KEY: ${{ secrets.GPR_KEY }}
 
     steps:
@@ -35,13 +33,14 @@ jobs:
       run: |
         echo "sdk.dir=$ANDROID_SDK_ROOT" > android/local.properties
         echo "flutter.sdk=$FLUTTER_ROOT" >> android/local.properties
-        
-        cat <<EOF > android/key.properties
-        storePassword=password123
-        keyPassword=password123
-        keyAlias=debugAlias
-        storeFile=debug.jks
+
+        cat <<EOF >> android/local.properties
+        signingConfigKeyAlias=debugAlias
+        signingConfigKeyPassword=password123
+        signingConfigKeyStorePath=app/debug.jks
+        signingConfigKeyStorePassword=password123
         EOF
+
         touch android/app/debug.jks
 
     - name: Install Dependencies
@@ -52,15 +51,18 @@ jobs:
         flutter pub run intl_utils:generate
         flutter pub run build_runner build --delete-conflicting-outputs
 
-    - name: Initialize Project (make init)
+    - name: Initialize Project
       run: make init
 
-    - name: Build APK
+    - name: Build split APKs
       run: |
-        flutter build apk --debug --dart-define=GPR_KEY=${{ secrets.GPR_KEY }}
+        flutter build apk --debug --split-per-abi --dart-define=GPR_KEY=${{ secrets.GPR_KEY }}
 
-    - name: Upload APK
+    - name: List generated APKs
+      run: ls -lah build/app/outputs/flutter-apk/
+
+    - name: Upload APKs
       uses: actions/upload-artifact@v4
       with:
-        name: trust-tunnel-fixed
+        name: trust-tunnel-split-apks
         path: build/app/outputs/flutter-apk/*.apk
