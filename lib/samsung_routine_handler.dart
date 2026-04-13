@@ -1,83 +1,86 @@
 import 'package:quick_actions/quick_actions.dart';
+import 'package:trusttunnel/data/model/routing_profile.dart';
+import 'package:trusttunnel/data/model/server.dart';
+import 'package:trusttunnel/data/repository/routing_repository.dart';
+import 'package:trusttunnel/data/repository/server_repository.dart';
+import 'package:trusttunnel/data/repository/settings_repository.dart';
+import 'package:trusttunnel/data/repository/vpn_repository.dart';
 
 class SamsungRoutineHandler {
   static final QuickActions _quickActions = const QuickActions();
 
   static void init({
-    required dynamic serverRepository,
-    required dynamic vpnRepository,
-    required dynamic routingRepository,
-    required dynamic settingsRepository,
+    required ServerRepository serverRepository,
+    required VpnRepository vpnRepository,
+    required RoutingRepository routingRepository,
+    required SettingsRepository settingsRepository,
   }) {
     _quickActions.initialize((String shortcutType) async {
-      
-      // Delay to ensure the Flutter engine and VPN services are fully awake
       await Future.delayed(const Duration(seconds: 1));
 
-      if (shortcutType == 'connect_work_server') {
+      if (shortcutType == 'connect_server_1') {
         try {
-          final servers = await serverRepository.getAllServers(); 
-          if (servers.isEmpty) return; // Exit if no servers exist at all
-          
-          // Try to find "server", ignoring case and spaces
-          var myWorkServer = servers.firstWhere(
-            (s) => s.serverData.name.toLowerCase().trim() == 'server',
-            orElse: () => null as dynamic, 
+          final servers = await serverRepository.getAllServers();
+          if (servers.isEmpty) return;
+
+          final Server targetServer =
+              _findServerByName(servers, 'server 1') ?? servers.first;
+
+          await serverRepository.setSelectedServerId(id: targetServer.id);
+
+          RoutingProfile? routingProfile = await routingRepository.getProfileById(
+            id: targetServer.serverData.routingProfileId,
           );
 
-          // FALLBACK: If "server" wasn't found, just use the first server in the list
-          // This ensures the button does *something* instead of silently failing
-          myWorkServer ??= servers.first;
-
-          if (myWorkServer != null) {
-            await serverRepository.setSelectedServerId(id: myWorkServer.id);
-
-            // Fetch the routing profile
-            var routingProfile = await routingRepository.getProfileById(
-              id: myWorkServer.serverData.routingProfileId,
-            );
-
-            // FALLBACK: If the profile is null, grab the first available profile
-            if (routingProfile == null) {
-              final allProfiles = await routingRepository.getAllProfiles();
-              if (allProfiles.isNotEmpty) {
-                routingProfile = allProfiles.first;
-              }
-            }
-
-            final excludedRoutes = await settingsRepository.getExcludedRoutes();
-
-            // Finally, start the VPN!
-            if (routingProfile != null) {
-               await vpnRepository.startListenToStates(
-                 server: myWorkServer,
-                 routingProfile: routingProfile,
-                 excludedRoutes: excludedRoutes ?? [],
-               );
-            }
+          if (routingProfile == null) {
+            final allProfiles = await routingRepository.getAllProfiles();
+            if (allProfiles.isEmpty) return;
+            routingProfile = allProfiles.first;
           }
-        } catch (e) {
-          // Ignore errors so the app doesn't crash
+
+          final excludedRoutes = await settingsRepository.getExcludedRoutes();
+
+          await vpnRepository.stop();
+
+          await vpnRepository.startListenToStates(
+            server: targetServer,
+            routingProfile: routingProfile,
+            excludedRoutes: excludedRoutes,
+          );
+        } catch (_) {
+          // Intentionally ignored so shortcut failures do not crash the app.
         }
-      } 
-      
-      else if (shortcutType == 'disconnect_vpn') {
+      } else if (shortcutType == 'disconnect_vpn') {
         await vpnRepository.stop();
       }
-      
     });
 
     _quickActions.setShortcutItems(<ShortcutItem>[
       const ShortcutItem(
-        type: 'connect_work_server',
-        localizedTitle: 'Connect to Work Server',
+        type: 'connect_server_1',
+        localizedTitle: 'Connect to server 1',
         icon: 'ic_launcher',
       ),
       const ShortcutItem(
         type: 'disconnect_vpn',
         localizedTitle: 'Disconnect VPN',
-        icon: 'ic_launcher', 
+        icon: 'ic_launcher',
       ),
     ]);
   }
+
+  static Server? _findServerByName(List<Server> servers, String name) {
+    final normalizedTarget = _normalize(name);
+
+    for (final server in servers) {
+      if (_normalize(server.serverData.name) == normalizedTarget) {
+        return server;
+      }
+    }
+
+    return null;
+  }
+
+  static String _normalize(String value) =>
+      value.toLowerCase().replaceAll(RegExp(r'\s+'), ' ').trim();
 }
